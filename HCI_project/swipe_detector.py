@@ -1,59 +1,28 @@
-
 class SwipeDetector:
 
     def detect_path(self, points):
 
-        # Minimum number of tracking points
-        if len(points) < 8:
+        if len(points) < 5:
             return None
 
-        xs = [point[0] for point in points]
-        ys = [point[1] for point in points]
+        start_x = points[0][0]
+        end_x = points[-1][0]
 
-        # Start-to-end movement
-        dx = xs[-1] - xs[0]
-        dy = ys[-1] - ys[0]
+        start_y = points[0][1]
+        end_y = points[-1][1]
 
-        # Total horizontal and vertical movement
-        horizontal_distance = sum(
-            abs(xs[i] - xs[i - 1])
-            for i in range(1, len(xs))
-        )
+        dx = end_x - start_x
+        dy = abs(end_y - start_y)
 
-        vertical_distance = sum(
-            abs(ys[i] - ys[i - 1])
-            for i in range(1, len(ys))
-        )
-
-        # Total vertical variation
-        vertical_range = max(ys) - min(ys)
-
-        # Avoid detecting very small movements
-        if abs(dx) < 100:
+        # Ignore small movements
+        if abs(dx) < 80:
             return None
 
-        if horizontal_distance < 110:
+        # Keep the movement mostly horizontal
+        if dy > 80:
             return None
 
-        # Check horizontal movement dominance
-        if vertical_distance > horizontal_distance * 0.65:
-            return None
-
-        # Check vertical deviation
-        if vertical_range > 100:
-            return None
-
-        # Direction consistency
-        consistency = abs(dx) / horizontal_distance
-
-        if consistency < 0.65:
-            return None
-
-        # Detect swipe direction
         if dx > 0:
             return "SWIPE_RIGHT"
 
-        else:
-            return "SWIPE_LEFT"
-
-        return None
+        return "SWIPE_LEFT"

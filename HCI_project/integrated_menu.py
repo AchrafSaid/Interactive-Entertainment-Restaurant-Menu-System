@@ -24,16 +24,25 @@ try:
 except ConnectionRefusedError:
     print("Cannot connect to Menu Server!")
     print("Please run menu_server_gui.py first.")
-    exit()
+    client.close()
+    raise SystemExit
 
 
 def send_gesture(gesture):
+    try:
+        message = gesture + "\n"
+        client.sendall(message.encode("utf-8"))
 
-    message = gesture + "\n"
-    client.sendall(message.encode("utf-8"))
+        response = client.recv(1024).decode("utf-8")
 
-    response = client.recv(1024).decode("utf-8")
-    print("Server Response:", response.strip())
+        if not response:
+            raise ConnectionResetError("Server disconnected.")
+
+        print("Server Response:", response.strip())
+
+    except (ConnectionResetError, BrokenPipeError, OSError) as error:
+        print("Error sending gesture:", error)
+        raise
 
 
 # =====================================
@@ -64,10 +73,7 @@ hands = mp_hands.Hands(
 # 4. STATIC GESTURE DETECTION
 # =====================================
 
-
 def detect_static_gesture(hand):
-
-    """Detect static hand gestures."""
 
     finger_tips = [8, 12, 16, 20]
     finger_pips = [6, 10, 14, 18]
@@ -85,43 +91,22 @@ def detect_static_gesture(hand):
 
     extended_fingers = sum(fingers)
 
-    # Open Palm: Four fingers extended
+    # OPEN PALM
     if extended_fingers == 4:
         return "OPEN_PALM"
 
-    # Closed Fist: All four fingers folded
+    # CLOSED FIST
     elif extended_fingers == 0:
         return "CLOSED_FIST"
 
-    # One Finger: Index finger only
+    # SELECT PRODUCT
     elif (
-        fingers[0] is True
-        and fingers[1] is False
-        and fingers[2] is False
-        and fingers[3] is False
+        fingers[0]
+        and not fingers[1]
+        and not fingers[2]
+        and not fingers[3]
     ):
         return "SELECT_PRODUCT"
-
-    return None
-
-
-    """Detect OPEN_PALM and CLOSED_FIST."""
-
-    finger_tips = [8, 12, 16, 20]
-    finger_pips = [6, 10, 14, 18]
-
-    extended_fingers = 0
-
-    for tip, pip in zip(finger_tips, finger_pips):
-
-        if hand.landmark[tip].y < hand.landmark[pip].y:
-            extended_fingers += 1
-
-    if extended_fingers >= 3:
-        return "OPEN_PALM"
-
-    elif extended_fingers <= 1:
-        return "CLOSED_FIST"
 
     return None
 
@@ -139,7 +124,7 @@ if not cap.isOpened():
     hands.close()
     client.close()
 
-    exit()
+    raise SystemExit
 
 
 # =====================================
@@ -153,16 +138,12 @@ recording = False
 last_position = None
 last_movement_time = 0
 
-IDLE_TIME = 0.8
-MOVEMENT_THRESHOLD = 5
-MIN_POINTS = 10
-COOLDOWN_TIME = 1.5
-
-cooldown = 0
-
+IDLE_TIME = 0.4
+MOVEMENT_THRESHOLD = 8
+MIN_POINTS = 5
+COOLDOWN_TIME = 1.0
 
 # Static gesture stability
-
 candidate_pose = None
 stable_frames = 0
 
@@ -170,7 +151,12 @@ STABLE_FRAMES_REQUIRED = 8
 
 last_sent_pose = None
 
+# Menu state
+menu_open = False
+
 last_result = "Waiting..."
+
+cooldown = 0
 
 
 # =====================================
@@ -183,6 +169,7 @@ print("================================")
 
 print("OPEN PALM: Open Menu")
 print("CLOSED FIST: Close Menu")
+print("ONE FINGER: Select Product")
 print("SWIPE RIGHT: Next Category")
 print("SWIPE LEFT: Previous Category")
 print("Press Q to quit.")
@@ -199,6 +186,7 @@ try:
         success, frame = cap.read()
 
         if not success:
+            print("Failed to read camera frame.")
             break
 
         frame = cv2.flip(frame, 1)
@@ -217,16 +205,13 @@ try:
         current_position = None
         static_gesture = None
 
-
         # ---------------------------------
-        # HAND DETECTION + LANDMARKS
+        # HAND DETECTION
         # ---------------------------------
 
         if results.multi_hand_landmarks:
 
             hand = results.multi_hand_landmarks[0]
-
-            # Draw 21 hand landmarks and connections
 
             mp_drawing.draw_landmarks(
                 frame,
@@ -234,19 +219,15 @@ try:
                 mp_hands.HAND_CONNECTIONS
             )
 
-            # Detect static hand gesture
-
             static_gesture = detect_static_gesture(hand)
 
             # Track index fingertip
-
             tip = hand.landmark[8]
 
             x = int(tip.x * width)
             y = int(tip.y * height)
 
             current_position = (x, y)
-
 
         # ---------------------------------
         # STATIC GESTURE RECOGNITION
@@ -255,80 +236,106 @@ try:
         if static_gesture is not None:
 
             if static_gesture == candidate_pose:
-
                 stable_frames += 1
 
             else:
-
                 candidate_pose = static_gesture
                 stable_frames = 1
 
-
             if (
                 stable_frames >= STABLE_FRAMES_REQUIRED
-                and static_gesture != last_sent_pose
+                and current_time >= cooldown
             ):
 
-                last_result = static_gesture
+                # OPEN MENU only if closed
+                if (
+                    static_gesture == "OPEN_PALM"
+                    and not menu_open
+                ):
 
-                print("\nDetected:", static_gesture)
+                    print("\nDetected: OPEN_PALM")
+                    send_gesture("OPEN_PALM")
 
-                send_gesture(static_gesture)
+                    menu_open = True
+                    last_result = "OPEN_PALM"
 
-                last_sent_pose = static_gesture
+                    recording = False
+                    points.clear()
 
-                # Reset movement recording
+                    cooldown = current_time + 0.6
 
-                recording = False
-                points.clear()
+                # CLOSE MENU only if open
+                elif (
+                    static_gesture == "CLOSED_FIST"
+                    and menu_open
+                ):
 
-                last_position = current_position
+                    print("\nDetected: CLOSED_FIST")
+                    send_gesture("CLOSED_FIST")
 
-                cooldown = current_time + 0.6
+                    menu_open = False
+                    last_result = "CLOSED_FIST"
+
+                    recording = False
+                    points.clear()
+
+                    cooldown = current_time + 0.6
+
+                # SELECT PRODUCT
+                elif (
+                    static_gesture == "SELECT_PRODUCT"
+                    and last_sent_pose != "SELECT_PRODUCT"
+                ):
+
+                    print("\nDetected: SELECT_PRODUCT")
+                    send_gesture("SELECT_PRODUCT")
+
+                    last_sent_pose = "SELECT_PRODUCT"
+                    last_result = "SELECT_PRODUCT"
+
+                    cooldown = current_time + 0.6
 
         else:
 
             candidate_pose = None
             stable_frames = 0
-
+            last_sent_pose = None
 
         # ---------------------------------
         # SWIPE MOVEMENT RECORDING
         # ---------------------------------
 
-        # Record movement only when no static gesture is detected
-
-        
-       
-        # ---------------------------------
-        # SWIPE MOVEMENT RECORDING
-        # ---------------------------------
-
-        if current_position is not None:
+        if (
+            static_gesture is None
+            and current_position is not None
+        ):
 
             if last_position is not None:
 
-                distance = math.hypot(
-                    current_position[0] - last_position[0],
-                    current_position[1] - last_position[1]
-                )
+                dx = current_position[0] - last_position[0]
+                dy = current_position[1] - last_position[1]
 
-                # Start recording when meaningful movement begins
+                distance = math.hypot(dx, dy)
+
+                # Start recording movement
                 if (
                     not recording
                     and distance >= MOVEMENT_THRESHOLD
                     and current_time >= cooldown
                 ):
+
                     recording = True
-                    points = []
+                    points = [last_position]
+
+                    last_movement_time = current_time
+
                     print("\nRecording Swipe...")
 
-                # Once recording starts, save EVERY tracked position
+                # Save movement positions
                 if recording:
 
                     points.append(current_position)
 
-                    # Update movement time only when the hand moves
                     if distance >= MOVEMENT_THRESHOLD:
                         last_movement_time = current_time
 
@@ -336,9 +343,7 @@ try:
 
         else:
 
-            # Hand temporarily lost
-            last_position = None
-
+            last_position = current_position
 
         # ---------------------------------
         # RECOGNIZE SWIPE
@@ -367,9 +372,7 @@ try:
 
                     last_result = "Not a Swipe"
 
-                    print(
-                        "Movement was not recognized as a swipe."
-                    )
+                    print("Movement was not recognized as a swipe.")
 
             else:
 
@@ -377,15 +380,9 @@ try:
 
                 print("Movement too short.")
 
-
-            # Clear recorded points
-
             points.clear()
 
-            # Apply cooldown
-
             cooldown = current_time + COOLDOWN_TIME
-
 
         # ---------------------------------
         # CAMERA DISPLAY
@@ -401,6 +398,16 @@ try:
             2
         )
 
+        cv2.putText(
+            frame,
+            "Menu: " + ("OPEN" if menu_open else "CLOSED"),
+            (10, 65),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 0),
+            2
+        )
+
         cv2.imshow(
             "Restaurant Menu Control",
             frame
@@ -408,31 +415,32 @@ try:
 
         key = cv2.waitKey(1) & 0xFF
 
-        if key == ord('q'):
+        if key == ord("q"):
             break
 
 
 # =====================================
-# 9. CLEANUP
+# 9. ERROR HANDLING
 # =====================================
 
-except (
-    ConnectionResetError,
-    BrokenPipeError,
-    OSError
-) as error:
+except (ConnectionResetError, BrokenPipeError, OSError) as error:
 
-    print("Socket connection error:", error)
+    print("Connection error:", error)
 
+except Exception as error:
+
+    print("Unexpected error:", error)
+
+
+# =====================================
+# 10. CLEANUP
+# =====================================
 
 finally:
 
     cap.release()
-
     hands.close()
-
     cv2.destroyAllWindows()
-
     client.close()
 
     print("\nRestaurant Menu Client Stopped.")
