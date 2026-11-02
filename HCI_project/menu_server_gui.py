@@ -3,6 +3,10 @@ import socket
 import threading
 import queue
 import tkinter as tk
+import json
+import traceback
+from concurrent.futures import Future, TimeoutError
+from dataclasses import dataclass, field
 
 from menu_ui import RestaurantMenuUI
 
@@ -12,6 +16,15 @@ PORT = 5000
 
 # Queue transfers gestures safely to the Tkinter main thread
 gesture_queue = queue.Queue()
+
+
+@dataclass
+class GestureRequest:
+    gesture: str
+    reply: Future = field(default_factory=Future)
+
+
+RESPONSE_TIMEOUT = 2
 
 
 def handle_client(client_socket, address):
@@ -38,11 +51,20 @@ def handle_client(client_socket, address):
 
                     print("Received Gesture:", gesture)
 
-                    # Send gesture to the GUI queue
-                    gesture_queue.put(gesture)
-
-                    # Reply to the gesture client
-                    response = f"Processed: {gesture}\n"
+                    request = GestureRequest(gesture)
+                    gesture_queue.put(request)
+                    # Acknowledge only after Tkinter applies the action.
+                    try:
+                        result = request.reply.result(timeout=RESPONSE_TIMEOUT)
+                    except TimeoutError:
+                        request.reply.cancel()
+                        result = {
+                            "ok": False,
+                            "gesture": gesture,
+                            "error": "The menu did not respond. Restart the menu server.",
+                            "state": None,
+                        }
+                    response = json.dumps(result) + "\n"
                     client_socket.sendall(
                         response.encode("utf-8")
                     )
@@ -78,16 +100,37 @@ def process_gestures(root, app):
 
     try:
         while True:
-            gesture = gesture_queue.get_nowait()
+            request = gesture_queue.get_nowait()
+            if not request.reply.set_running_or_notify_cancel():
+                continue
 
-            print("Updating GUI:", gesture)
-            app.handle_gesture(gesture)
+            try:
+                print("Updating GUI:", request.gesture)
+                applied = request.gesture == "STATUS" or app.handle_gesture(request.gesture)
+                root.update_idletasks()
+                result = {
+                    "ok": bool(applied),
+                    "gesture": request.gesture,
+                    "state": app.get_state(),
+                }
+                if not applied:
+                    result["error"] = "Gesture is not available in the current menu."
+            except Exception as error:
+                traceback.print_exc()
+                result = {
+                    "ok": False,
+                    "gesture": request.gesture,
+                    "error": str(error),
+                    "state": app.get_state(),
+                }
+            request.reply.set_result(result)
 
     except queue.Empty:
         pass
 
-    # Check the queue again after 50 milliseconds
-    root.after(50, process_gestures, root, app)
+    finally:
+        # Keep processing future gestures even if one GUI action fails.
+        root.after(30, process_gestures, root, app)
 
 
 def close_application(root, server_socket):
@@ -103,10 +146,6 @@ def close_application(root, server_socket):
 
 if __name__ == "__main__":
 
-    # Create the GUI
-    root = tk.Tk()
-    app = RestaurantMenuUI(root)
-
     # Create TCP server
     server = socket.socket(
         socket.AF_INET,
@@ -119,8 +158,19 @@ if __name__ == "__main__":
         1
     )
 
-    server.bind((HOST, PORT))
+    try:
+        server.bind((HOST, PORT))
+    except OSError as error:
+        server.close()
+        raise SystemExit(
+            f"Cannot start the menu server: {error}. "
+            "Close any older menu server before restarting."
+        ) from error
     server.listen(5)
+
+    # Bind first so an older server cannot leave a second, disconnected window.
+    root = tk.Tk()
+    app = RestaurantMenuUI(root)
 
     # Start server in a background thread
     server_thread = threading.Thread(

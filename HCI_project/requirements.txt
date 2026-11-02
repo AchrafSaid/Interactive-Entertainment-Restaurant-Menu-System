@@ -1,0 +1,10 @@
+# Python 3.12. The project uses the legacy mp.solutions API.
+mediapipe==0.10.21
+numpy==1.26.4
+# Includes cv2; do not also install opencv-python or a headless variant.
+opencv-contrib-python==4.11.0.86
+dollarpy==0.1.1
+Pillow==13.0.0
+# Keep MediaPipe's JAX dependencies compatible with NumPy 1.x.
+jax==0.7.1
+jaxlib==0.7.1

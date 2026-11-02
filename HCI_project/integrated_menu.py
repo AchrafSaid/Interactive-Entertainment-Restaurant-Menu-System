@@ -1,11 +1,13 @@
 
 import cv2
 import mediapipe as mp
-import math
 import time
-import socket
+import numpy as np
 
-from swipe_detector import SwipeDetector
+from gesture_controller import GestureController
+from hand_pose import detect_static_gesture
+from menu_connection import MenuConnection
+from camera_control import read_camera_frame
 
 
 # =====================================
@@ -14,44 +16,44 @@ from swipe_detector import SwipeDetector
 
 HOST = "127.0.0.1"
 PORT = 5000
-
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+camera_enabled = True
+hand_control_enabled = True
 
 try:
-    client.connect((HOST, PORT))
+    client = MenuConnection(HOST, PORT)
     print("Connected to Restaurant Menu Server!")
 
-except ConnectionRefusedError:
-    print("Cannot connect to Menu Server!")
+except OSError as error:
+    print("Cannot connect to Menu Server:", error)
     print("Please run menu_server_gui.py first.")
-    client.close()
     raise SystemExit
 
 
 def send_gesture(gesture):
-    try:
-        message = gesture + "\n"
-        client.sendall(message.encode("utf-8"))
-
-        response = client.recv(1024).decode("utf-8")
-
-        if not response:
-            raise ConnectionResetError("Server disconnected.")
-
-        print("Server Response:", response.strip())
-
-    except (ConnectionResetError, BrokenPipeError, OSError) as error:
-        print("Error sending gesture:", error)
-        raise
+    global camera_enabled, hand_control_enabled
+    response = client.request(gesture)
+    gesture_controller.confirm_menu_state(response["state"]["menu_open"])
+    camera_enabled = response["state"].get("camera_enabled", True)
+    hand_control_enabled = response["state"].get("hand_control_enabled", True)
+    if gesture != "STATUS":
+        print("Server Response:", response)
+    return response
 
 
 # =====================================
-# 2. SWIPE DETECTOR
+# 2. GESTURE CONTROLLER
 # =====================================
 
-swipe_detector = SwipeDetector()
+gesture_controller = GestureController()
 
-print("Swipe Detector Ready!")
+print("Gesture Controller Ready!")
+
+try:
+    send_gesture("STATUS")
+except (OSError, RuntimeError) as error:
+    print("Cannot confirm menu state:", error)
+    client.close()
+    raise SystemExit
 
 
 # =====================================
@@ -64,99 +66,24 @@ mp_drawing = mp.solutions.drawing_utils
 hands = mp_hands.Hands(
     static_image_mode=False,
     max_num_hands=1,
-    min_detection_confidence=0.7,
-    min_tracking_confidence=0.7
+    min_detection_confidence=0.6,
+    min_tracking_confidence=0.5
 )
-
-
-# =====================================
-# 4. STATIC GESTURE DETECTION
-# =====================================
-
-def detect_static_gesture(hand):
-
-    finger_tips = [8, 12, 16, 20]
-    finger_pips = [6, 10, 14, 18]
-
-    fingers = []
-
-    for tip, pip in zip(finger_tips, finger_pips):
-
-        extended = (
-            hand.landmark[tip].y <
-            hand.landmark[pip].y
-        )
-
-        fingers.append(extended)
-
-    extended_fingers = sum(fingers)
-
-    # OPEN PALM
-    if extended_fingers == 4:
-        return "OPEN_PALM"
-
-    # CLOSED FIST
-    elif extended_fingers == 0:
-        return "CLOSED_FIST"
-
-    # SELECT PRODUCT
-    elif (
-        fingers[0]
-        and not fingers[1]
-        and not fingers[2]
-        and not fingers[3]
-    ):
-        return "SELECT_PRODUCT"
-
-    return None
 
 
 # =====================================
 # 5. CAMERA
 # =====================================
 
-cap = cv2.VideoCapture(0)
-
-if not cap.isOpened():
-
-    print("Cannot open camera")
-
-    hands.close()
-    client.close()
-
-    raise SystemExit
+cap = cv2.VideoCapture()
 
 
 # =====================================
 # 6. GESTURE SETTINGS
 # =====================================
 
-points = []
-
-recording = False
-
-last_position = None
-last_movement_time = 0
-
-IDLE_TIME = 0.4
-MOVEMENT_THRESHOLD = 8
-MIN_POINTS = 5
-COOLDOWN_TIME = 1.0
-
-# Static gesture stability
-candidate_pose = None
-stable_frames = 0
-
-STABLE_FRAMES_REQUIRED = 8
-
-last_sent_pose = None
-
-# Menu state
-menu_open = False
-
 last_result = "Waiting..."
-
-cooldown = 0
+next_state_sync = 0
 
 
 # =====================================
@@ -167,9 +94,9 @@ print("\n================================")
 print("RESTAURANT MENU GESTURE CONTROL")
 print("================================")
 
-print("OPEN PALM: Open Menu")
+print("OPEN PALM: Open Menu / Back to Menu")
 print("CLOSED FIST: Close Menu")
-print("ONE FINGER: Select Product")
+print("ONE FINGER: Hold left / center / right to select that product")
 print("SWIPE RIGHT: Next Category")
 print("SWIPE LEFT: Previous Category")
 print("Press Q to quit.")
@@ -183,33 +110,36 @@ try:
 
     while True:
 
-        success, frame = cap.read()
+        current_time = time.monotonic()
+        if current_time >= next_state_sync:
+            send_gesture("STATUS")
+            next_state_sync = current_time + 1
+
+        success, frame = read_camera_frame(cap, camera_enabled)
 
         if not success:
             print("Failed to read camera frame.")
             break
 
-        frame = cv2.flip(frame, 1)
-
-        rgb = cv2.cvtColor(
-            frame,
-            cv2.COLOR_BGR2RGB
-        )
-
-        results = hands.process(rgb)
-
-        height, width, _ = frame.shape
+        if frame is None:
+            frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            results = None
+        else:
+            frame = cv2.flip(frame, 1)
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = hands.process(rgb) if hand_control_enabled else None
 
         current_time = time.monotonic()
 
         current_position = None
         static_gesture = None
+        finger_x = None
 
         # ---------------------------------
         # HAND DETECTION
         # ---------------------------------
 
-        if results.multi_hand_landmarks:
+        if results is not None and results.multi_hand_landmarks:
 
             hand = results.multi_hand_landmarks[0]
 
@@ -219,174 +149,38 @@ try:
                 mp_hands.HAND_CONNECTIONS
             )
 
-            static_gesture = detect_static_gesture(hand)
+            world_hands = results.multi_hand_world_landmarks
+            pose_hand = world_hands[0] if world_hands else hand
+            static_gesture = detect_static_gesture(pose_hand)
 
-            # Track index fingertip
-            tip = hand.landmark[8]
-
-            x = int(tip.x * width)
-            y = int(tip.y * height)
-
-            current_position = (x, y)
-
-        # ---------------------------------
-        # STATIC GESTURE RECOGNITION
-        # ---------------------------------
-
-        if static_gesture is not None:
-
-            if static_gesture == candidate_pose:
-                stable_frames += 1
-
-            else:
-                candidate_pose = static_gesture
-                stable_frames = 1
-
-            if (
-                stable_frames >= STABLE_FRAMES_REQUIRED
-                and current_time >= cooldown
-            ):
-
-                # OPEN MENU only if closed
-                if (
-                    static_gesture == "OPEN_PALM"
-                    and not menu_open
-                ):
-
-                    print("\nDetected: OPEN_PALM")
-                    send_gesture("OPEN_PALM")
-
-                    menu_open = True
-                    last_result = "OPEN_PALM"
-
-                    recording = False
-                    points.clear()
-
-                    cooldown = current_time + 0.6
-
-                # CLOSE MENU only if open
-                elif (
-                    static_gesture == "CLOSED_FIST"
-                    and menu_open
-                ):
-
-                    print("\nDetected: CLOSED_FIST")
-                    send_gesture("CLOSED_FIST")
-
-                    menu_open = False
-                    last_result = "CLOSED_FIST"
-
-                    recording = False
-                    points.clear()
-
-                    cooldown = current_time + 0.6
-
-                # SELECT PRODUCT
-                elif (
-                    static_gesture == "SELECT_PRODUCT"
-                    and last_sent_pose != "SELECT_PRODUCT"
-                ):
-
-                    print("\nDetected: SELECT_PRODUCT")
-                    send_gesture("SELECT_PRODUCT")
-
-                    last_sent_pose = "SELECT_PRODUCT"
-                    last_result = "SELECT_PRODUCT"
-
-                    cooldown = current_time + 0.6
-
-        else:
-
-            candidate_pose = None
-            stable_frames = 0
-            last_sent_pose = None
+            # Average the wrist and knuckles so finger curling does not move
+            # the tracking point as much as a single finger landmark would.
+            palm_points = [hand.landmark[index] for index in (0, 5, 9, 13, 17)]
+            current_position = (
+                sum(point.x for point in palm_points) / len(palm_points),
+                sum(point.y for point in palm_points) / len(palm_points),
+            )
+            finger_x = hand.landmark[8].x
 
         # ---------------------------------
-        # SWIPE MOVEMENT RECORDING
+        # MOVEMENT AND HELD POSES
         # ---------------------------------
 
-        if (
-            static_gesture is None
-            and current_position is not None
-        ):
-
-            if last_position is not None:
-
-                dx = current_position[0] - last_position[0]
-                dy = current_position[1] - last_position[1]
-
-                distance = math.hypot(dx, dy)
-
-                # Start recording movement
-                if (
-                    not recording
-                    and distance >= MOVEMENT_THRESHOLD
-                    and current_time >= cooldown
-                ):
-
-                    recording = True
-                    points = [last_position]
-
-                    last_movement_time = current_time
-
-                    print("\nRecording Swipe...")
-
-                # Save movement positions
-                if recording:
-
-                    points.append(current_position)
-
-                    if distance >= MOVEMENT_THRESHOLD:
-                        last_movement_time = current_time
-
-            last_position = current_position
-
-        else:
-
-            last_position = current_position
-
-        # ---------------------------------
-        # RECOGNIZE SWIPE
-        # ---------------------------------
-
-        if (
-            recording
-            and current_time - last_movement_time >= IDLE_TIME
-        ):
-
-            recording = False
-
-            if len(points) >= MIN_POINTS:
-
-                swipe = swipe_detector.detect_path(points)
-
-                if swipe in ("SWIPE_RIGHT", "SWIPE_LEFT"):
-
-                    last_result = swipe
-
-                    print("\nDetected:", swipe)
-
-                    send_gesture(swipe)
-
-                else:
-
-                    last_result = "Not a Swipe"
-
-                    print("Movement was not recognized as a swipe.")
-
-            else:
-
-                last_result = "Movement Too Short"
-
-                print("Movement too short.")
-
-            points.clear()
-
-            cooldown = current_time + COOLDOWN_TIME
+        gesture = gesture_controller.update(
+            static_gesture, current_position, current_time, finger_x
+        )
+        if gesture is not None:
+            print("\nDetected:", gesture)
+            response = send_gesture(gesture)
+            last_result = gesture if response["ok"] else "Menu did not apply gesture"
+            next_state_sync = current_time + 1
 
         # ---------------------------------
         # CAMERA DISPLAY
         # ---------------------------------
+
+        height, width = frame.shape[:2]
+        cv2.rectangle(frame, (0, 0), (width, 135), (32, 32, 32), -1)
 
         cv2.putText(
             frame,
@@ -400,13 +194,55 @@ try:
 
         cv2.putText(
             frame,
-            "Menu: " + ("OPEN" if menu_open else "CLOSED"),
+            "Menu: " + ("OPEN" if gesture_controller.menu_open else "CLOSED"),
             (10, 65),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (0, 255, 0),
             2
         )
+
+        progress = gesture_controller.hold_progress(current_time)
+        swipe_direction, swipe_progress = gesture_controller.swipe_progress()
+        if not camera_enabled:
+            hint = "Camera off - enable it in the menu"
+            progress = 0
+        elif not hand_control_enabled:
+            hint = "Touch control active - use the menu buttons"
+            progress = 0
+        elif current_position is None:
+            hint = "No hand detected - show your full hand"
+            progress = 0
+        elif static_gesture == "SELECT_PRODUCT" and not gesture_controller.menu_open:
+            hint = "Hold an open palm to open the menu first"
+            progress = 0
+        elif static_gesture == "SELECT_PRODUCT":
+            target = gesture_controller.target_index
+            if target is None:
+                target = gesture_controller.product_index(finger_x)
+            hint = f"Item {target + 1}: hold still ({int(progress * 100)}%)"
+            for column in (1, 2):
+                cv2.line(frame, (width * column // 3, 140),
+                         (width * column // 3, height), (150, 150, 150), 1)
+            for column in range(3):
+                cv2.putText(frame, str(column + 1),
+                            (width * (2 * column + 1) // 6, height - 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+        elif swipe_direction is not None and static_gesture != "CLOSED_FIST":
+            hint = f"Swipe {swipe_direction}: keep moving horizontally"
+            progress = swipe_progress
+        elif static_gesture is not None:
+            pose_name = static_gesture.replace("_", " ").title()
+            hint = f"{pose_name}: hold still ({int(progress * 100)}%)"
+        else:
+            hint = "Show an open palm, a fist, or one index finger"
+
+        cv2.putText(frame, hint, (10, 100), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6, (0, 255, 255), 2)
+        cv2.rectangle(frame, (10, 115), (width - 10, 125), (80, 80, 80), -1)
+        if progress > 0:
+            cv2.rectangle(frame, (10, 115),
+                          (10 + int((width - 20) * progress), 125), (0, 200, 0), -1)
 
         cv2.imshow(
             "Restaurant Menu Control",
@@ -423,7 +259,7 @@ try:
 # 9. ERROR HANDLING
 # =====================================
 
-except (ConnectionResetError, BrokenPipeError, OSError) as error:
+except (ConnectionResetError, BrokenPipeError, OSError, RuntimeError) as error:
 
     print("Connection error:", error)
 
