@@ -1,3 +1,10 @@
+import sys
+if __name__ == "__main__":
+    from run_menu import ensure_runtime, check_gesture_runtime
+    ensure_runtime()
+    if "--check" in sys.argv:
+        raise SystemExit(check_gesture_runtime())
+
 
 import cv2
 import mediapipe as mp

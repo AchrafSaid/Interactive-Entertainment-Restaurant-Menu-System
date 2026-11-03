@@ -1,0 +1,189 @@
+OLIVE / TABLE - UPDATED MENU, BLUETOOTH AND HAND CONTROL
+=====================================================
+
+OPEN THE APP
+
+Double-click Start Menu.cmd in the project folder, or open:
+
+    release\OliveTable\OliveTable.exe
+
+The finished Windows app includes the menu, Bluetooth and hand-control runtime.
+Keep the entire OliveTable folder, including _internal. Extract the ZIP fully
+before starting it. Windows 11 x64 and the Microsoft Edge WebView2 Runtime are
+required. Python is not required for the packaged app.
+
+If running from source, use:
+
+    python run_menu.py
+
+The source entry points automatically select the prepared Python 3.10
+environment at .venv-gestures. On another computer, install Python 3.10 with its
+launcher and run Setup Gestures.cmd once.
+
+The first screen lets you connect your phone or choose
+"Skip - Continue as guest". Guest visits include the menu, cart, games and hand
+controls without Bluetooth. They do not earn points or create a saved user.
+End visit returns to the first page and clears the current cart.
+Hand control works on the first page, including the guest button.
+
+
+SET UP YOUR IPHONE ONCE
+
+1. Turn on Bluetooth on Windows and on your iPhone.
+2. Install LightBlue by Punch Through on the iPhone:
+   https://apps.apple.com/us/app/lightblue/id557428110
+3. Open LightBlue and allow Bluetooth access.
+4. Open Virtual, press +, and create a blank virtual device. Save it, then edit
+   it and give it the name you want to use as your restaurant username.
+5. Add this custom service:
+
+   7b183224-9168-443e-a927-7aeea07e8101
+
+6. Inside that service, add this characteristic and enable Read:
+
+   7b183224-9168-443e-a927-7aeea07e8102
+
+7. Give the characteristic a unique permanent Phone ID using Text / ASCII /
+   UTF-8 format. For the phone already configured in this chat, KEEP:
+
+   nadeem-iphone-01
+
+   If LightBlue is in Hex mode, that same value is:
+
+   6E616465656D2D6970686F6E652D3031
+
+   Each phone needs a different ID. Keep the SAME ID on future visits.
+   Renaming a phone updates its username without losing its points.
+8. Save your changes. Go BACK to the Virtual Devices LIST. Select the circle
+   to the LEFT of your virtual device name so it is filled blue.
+9. Keep LightBlue open on that screen and the iPhone unlocked. Sending a
+   screenshot or switching apps can put LightBlue in the background; return
+   to LightBlue before scanning on the computer.
+
+The first screen has "How to connect your iPhone" with the setup values and
+Copy buttons. The suggested Phone ID is for NEW phones; keep an existing
+phone's saved ID. A Windows clipboard does not automatically sync to iPhone.
+
+
+CONNECT ON EVERY VISIT
+
+1. Start advertising the saved virtual device in LightBlue and keep it open.
+2. Point at Scan for phones and pinch to select. Wait about six seconds.
+   Touch and mouse also work.
+3. Choose the device name you set in LightBlue, then Connect Bluetooth.
+   Other nearby Bluetooth devices can appear in the list too. The app checks
+   the required Phone ID after connecting; unrelated devices cannot unlock it.
+4. The new welcome page appears. Your username and saved points are shown.
+5. Choose Start your experience, then Use touch instead or Use hand control.
+
+The scan does not require the service UUID to be advertised, because iPhone
+virtual peripherals can omit it. Windows reads services again on connection
+so edits to your LightBlue device are not hidden by stale cached services.
+
+
+POINTS AND DISCONNECTION
+
+Every successful new Bluetooth connection adds 10 points. Repeated clicks,
+menu navigation, and failed connections add no points.
+
+The points dataset is readable JSON text in data\bluetooth_users.txt beside
+the packaged executable. Existing records from the previous build are kept.
+When the source dataset is empty, the source app reuses the existing dataset
+under release\OliveTable\data so your earlier points remain available.
+
+End visit, switching Bluetooth off, losing the live phone link, or a sustained
+weak advertised signal returns to the connection page. Your current cart,
+modal and username are cleared. Saved points remain.
+
+The app reads the phone every 1.5 seconds without using cached values. Two
+failed reads, each with a 3-second timeout, close a stuck connection. A native
+radio-link loss locks the app as soon as Windows reports it.
+
+When the connected phone continues advertising, the app also smooths its
+signal strength. A weak signal (about -78 dBm or lower) sustained for four
+seconds disconnects the phone. Brief dips do not end a visit. Walls, your
+body and the adapter affect signal strength; there is no fixed metre cutoff.
+
+Some iPhones stop advertising after connecting. Without fresh signal data,
+the app shows "live link checks" and uses actual link loss and phone reads.
+Missing advertisements alone do not mean that a phone moved away. Test this
+on your actual restaurant computer and phone.
+
+The downloadable release ZIP excludes saved customer records. Back up your
+points file before moving or replacing the app folder.
+
+
+HAND CONTROL
+
+Hand control starts when you open the app, including on the Bluetooth page.
+The live preview and guide stay in the right sidebar. No camera images are
+saved. Choose Bluetooth or Continue as guest to enter the menu.
+
+1. POINT: hold up one index finger and move it to move the green cursor.
+   A gold outline shows the button you are aiming at.
+2. PINCH: touch thumb and index briefly to select. Open the pinch before
+   selecting again. Holding a pinch does not repeat. This works on phone
+   choices, Scan, Connect, categories, View, quantities and every other button.
+3. SCROLL: hold up index and middle fingers. Move them up to scroll down,
+   or down to scroll up. This also scrolls phone choices and help dialogs.
+4. BACK: hold a closed fist for about 0.65 seconds, then relax. This closes
+   a dialog or returns to your previous page. An open palm pauses the pointer.
+
+To order: choose a category, View any dish, adjust its quantity and choose
+Add to order. Choose Order to edit quantities, then Review & confirm. You
+can keep editing or confirm the demo. No real order or payment is sent.
+End visit also asks for confirmation.
+
+Use one hand in the camera view and avoid strong backlighting. Move your
+finger within the central part of the preview to reach the screen edges.
+The cursor is smoothed to reduce jitter and freezes during a pinch to help
+avoid selecting a neighbouring button.
+
+Stop camera, or press Q, to turn it off. Use Start hand control to restart.
+Hand control stays available at the locked page after a lost connection so
+you can reconnect by hand. To start with the camera off:
+
+    python run_menu.py --touch
+
+You can also launch the source directly in hand-control mode:
+
+    python integrated_menu.py
+
+Or double-click Start Gestures.cmd. This opens the complete app; it is an
+alternative launcher, so run one copy of the app at a time.
+
+To check the recognition runtime without opening the camera:
+
+    python integrated_menu.py --check
+
+The local gesture socket (127.0.0.1:5000) and camera preview server
+(127.0.0.1:8765) remain available for the project's development integrations.
+The updated all-in-one app does not need a separately running gesture client.
+
+
+TROUBLESHOOTING
+
+Phone missing: select its circle in LightBlue's Virtual Devices list, keep the
+phone unlocked with LightBlue open, move closer, then scan again.
+
+Phone listed but cannot connect: check BOTH UUIDs use 443e (not 44be), enable
+Read, and check that the Phone ID is text or the correct Hex bytes. Stop and
+restart the virtual device after editing its services.
+
+Camera cannot open: close another camera app and click Start hand control
+again, or continue with touch. The app does not change your Windows camera
+permissions automatically.
+
+App already running: close the other Olive / Table window. Local ports 5000
+and 8765 must be available for this app.
+
+Missing Python libraries: run Setup Gestures.cmd in the project folder.
+
+WebView2 Runtime download:
+https://developer.microsoft.com/microsoft-edge/webview2/
+
+LightBlue virtual-device guide:
+https://punchthrough.com/lightblue-virtual-devices/
+
+This project preserves the upstream demo order and game screens. Bluetooth
+points are local to this computer; the Phone ID is not account authentication.

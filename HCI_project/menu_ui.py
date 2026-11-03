@@ -1,3 +1,8 @@
+# The supported app entry point uses the shared Bluetooth-protected HTML UI.
+if __name__ == "__main__":
+    from run_menu import main
+    raise SystemExit(main())
+
 import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk

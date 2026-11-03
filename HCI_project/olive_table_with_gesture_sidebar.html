@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Olive / Table</title>
-<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="bluetooth_ui.css">
 <style>
 :root{--bg:#f5f2ea;--card:#fffdf9;--ink:#173d33;--mut:#6b6f6a;--soft:#e1eae1;--line:#e4dfd3;--warn:#f1ddd5;--redt:#a4452c}
 *{box-sizing:border-box;margin:0}
@@ -68,7 +68,34 @@ nav{display:flex;align-items:center;justify-content:space-between;background:var
 @keyframes sp{to{transform:rotate(360deg)}}
 .qr{width:150px;height:150px;border:2px dashed var(--line);border-radius:12px;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:40px}
 .steps li{list-style:none;display:flex;gap:10px;margin:12px 0}.steps li span{background:var(--soft);border-radius:8px;padding:2px 8px;font-size:11px}
+/* Live camera preview */
+.camera-card{
+    background:var(--soft);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:8px;
+    margin:12px 0;
+}
 
+.camera-card h3{
+    font-size:13px;
+    margin-bottom:7px;
+}
+
+.camera-frame{
+    width:100%;
+    aspect-ratio:4/3;
+    object-fit:cover;
+    border-radius:8px;
+    background:#172d27;
+    display:block;
+}
+
+.camera-status{
+    font-size:9px;
+    color:var(--mut);
+    margin-top:6px;
+}
 /* Always-visible gesture guide on the right */
 .gesture-sidebar{position:fixed;top:85px;right:12px;bottom:15px;width:215px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;z-index:15;overflow-y:auto;box-shadow:0 5px 20px rgba(23,61,51,.06)}
 .gesture-sidebar h2{font-size:21px;margin-bottom:4px}
@@ -84,9 +111,12 @@ nav{display:flex;align-items:center;justify-content:space-between;background:var
 @media(max-width:560px){.gesture-sidebar .gesture-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:430px){.grid{grid-template-columns:1fr}.pad{padding:22px 14px}nav{padding:12px 14px}}
 </style>
+<link rel="stylesheet" href="hand_ui.css">
 </head>
 <body>
 <div id="app"></div>
+<script src="bluetooth_ui.js"></script>
+<script src="hand_ui.js"></script>
 <script>
 "use strict";
 
@@ -183,31 +213,19 @@ const CATS = [
 "Combos & Offers"
 ];
 
-const GESTURES=[
-{name:"OPEN PALM",icon:"🖐️",action:"Open Menu",description:"Show your open hand to open the menu."},
-{name:"CLOSED FIST",icon:"✊",action:"Close / Go Back",description:"Close your hand into a fist to go back."},
-{name:"SWIPE RIGHT",icon:"👉",action:"Next Category",description:"Move your hand towards the right."},
-{name:"SWIPE LEFT",icon:"👈",action:"Previous Category",description:"Move your hand towards the left."},
-{name:"SWIPE UP",icon:"👆",action:"Previous Category",description:"Move your hand upwards."},
-{name:"SWIPE DOWN",icon:"👇",action:"Next Category",description:"Move your hand downwards."},
-{name:"SELECT PRODUCT",icon:"☝️",action:"Select Product",description:"Raise one finger to select a product."},
-{name:"THUMBS UP",icon:"👍",action:"Add to Cart",description:"Give a thumbs up to add the selected item."},
-{name:"THUMBS DOWN",icon:"👎",action:"Decline Product",description:"Give a thumbs down to decline a product."},
-{name:"C SHAPE",icon:"🤏",action:"Open Cart",description:"Make a C-shaped gesture with your hand."},
-{name:"OK SIGN",icon:"👌",action:"Checkout",description:"Make an OK sign to confirm checkout."}
-];
 
-let S={scr:"welcome",cat:"Main courses",cart:{},modal:null,mq:1,toast:"",sent:false,toastTimer:null};
+
+let S={scr:"bluetooth",cat:"Main courses",cart:{},modal:null,mq:1,toast:"",sent:false,toastTimer:null,confirm:false,page:0,history:[]};
 const $=id=>ITEMS.find(item=>item.id===id);
 const cartCount=()=>Object.values(S.cart).reduce((a,b)=>a+b,0);
 const tot=()=>Object.entries(S.cart).reduce((sum,[id,qty])=>sum+($(id)?$(id).p*qty:0),0);
 const money=n=>`${n} EGP`;
 
-function go(screen){S.scr=screen;S.modal=null;render()}
+function go(screen){if(!BluetoothUI.requireAccess())return;if(S.scr!==screen)S.history.push(S.scr);S.scr=screen;S.modal=null;S.confirm=false;render();window.scrollTo?.(0,0)}
 function tip(message){S.toast=message;render();clearTimeout(S.toastTimer);S.toastTimer=setTimeout(()=>{S.toast="";render()},2200)}
-function add(id,quantity=1){const item=$(id);if(!item)return;S.cart[id]=(S.cart[id]||0)+quantity;tip(`${item.n} added to your order`)}
-function removeOne(id){if(!S.cart[id])return;if(S.cart[id]>1)S.cart[id]--;else delete S.cart[id];render()}
-function setCategory(category){if(!CATS.includes(category))return;S.cat=category;S.modal=null;render()}
+function add(id,quantity=1){if(!BluetoothUI.requireAccess())return;const item=$(id);if(!item)return;S.cart[id]=Math.min(20,(S.cart[id]||0)+Math.max(1,quantity));tip(`${item.n} added to your order`)}
+function removeOne(id){if(!BluetoothUI.requireAccess())return;if(!S.cart[id])return;if(S.cart[id]>1)S.cart[id]--;else delete S.cart[id];render()}
+function setCategory(category){if(!BluetoothUI.requireAccess())return;if(!CATS.includes(category))return;S.cat=category;S.page=0;S.modal=null;render()}
 
 function welcome(){return `
 <section class="welcome">
@@ -217,7 +235,7 @@ function welcome(){return `
 <h1>Welcome to<br>Olive / Table.</h1>
 <p>Explore our menu, discover your favourites, and enjoy an interactive dining experience.</p>
 <div class="stack"><button class="btn p" onclick="go('gate')">Start your experience →</button></div>
-<p class="small">Gesture controls are available when the camera integration is connected.</p></div>
+<p class="small">Point at a button and pinch your thumb and index finger to select. Touch and mouse work too.</p></div>
 </section>`}
 
 function gatePage(){return `
@@ -225,10 +243,11 @@ function gatePage(){return `
 <div class="pad"><span class="small">STEP 01 / INTERACTION</span>
 <h1 style="font-size:38px;margin:12px 0">Make yourself comfortable.</h1>
 <p class="small">Choose how you want to explore the menu.</p>
-<div class="gate"><div class="illus"><span>✋</span><strong style="font-size:15px">Gesture control</strong><span class="small">Camera integration pending</span></div>
+<div class="gate"><div class="illus"><span>✋</span><strong style="font-size:15px">Your hands, your choice</strong><span class="small">Point · pinch · explore</span></div>
 <div class="card stack"><h2 style="font-size:26px">Ready to explore?</h2>
-<p>You can browse the menu using the buttons. Gesture controls will work after connecting the Python camera application.</p>
-<button class="btn p" onclick="browse()">Explore the menu →</button><button class="btn" onclick="go('welcome')">Back</button></div></div></div>`}
+<p>Point to move the cursor. Pinch to select. Use two fingers to scroll and hold a fist to go back.</p>
+<button class="btn p" onclick="BluetoothUI.setCamera(true,true)">Use hand control →</button>
+<button class="btn" onclick="browse()">Use touch instead</button><button class="tab" onclick="go('welcome')">Back</button></div></div></div>`}
 
 function navbar(){return `
 <nav><div class="logo">OLIVE / TABLE</div><div class="tabs">
@@ -237,21 +256,22 @@ function navbar(){return `
 <button class="tab ${S.scr==="rewards"?"on":""}" onclick="go('rewards')">Rewards</button>
 </div><button class="btn" onclick="review()">Order (${cartCount()})</button></nav>`}
 
-function browse(){S.scr="browse";S.modal=null;render()}
+function browse(){go("browse")}
 function browsePage(){
-const list=ITEMS.filter(item=>item.category===S.cat);
+const all=ITEMS.filter(item=>item.category===S.cat);const pages=Math.ceil(all.length/6);S.page=Math.max(0,Math.min(S.page,pages-1));const list=all.slice(S.page*6,S.page*6+6);
 return `${navbar()}<div class="bar"><span>THE MENU</span><span>Freshly prepared for you</span><span>${cartCount()} ITEMS IN ORDER</span></div>
 <main class="pad"><span class="small">DISCOVER OUR MENU</span><h1 style="font-size:36px;margin:8px 0">Something delicious.</h1>
-<p class="small">Choose a category and explore our selection.</p><div class="browse"><div class="cats">
+<div class="hand-instruction"><span style="font-size:24px">☝</span><span><b>Your menu, at your fingertips.</b><br>Choose a category, point at any View button, then pinch to open your dish.</span></div><div class="browse"><div class="cats">
 ${CATS.map(c=>`<button class="cat ${S.cat===c?"on":""}" onclick="setCategory('${c}')">${c}</button>`).join("")}</div>
 <div style="flex:1;min-width:0"><div class="grid">${list.length?list.map(item=>`
-<article class="dish"><div class="img" style="background:${item.bg}" onclick="openItem('${item.id}')">${item.e}</div>
+<article class="dish"><div class="img" style="background:${item.bg}">${item.e}</div>
 <h3>${item.n}</h3><p class="small">${item.d}</p><div class="row"><span class="price">${money(item.p)}</span><button class="btn p" onclick="openItem('${item.id}')">View</button></div></article>`).join(""):`
-<div class="card" style="grid-column:1/-1"><h3>No items available yet.</h3><p class="small">New dishes will be added soon.</p></div>`}</div></div></div>
+<div class="card" style="grid-column:1/-1"><h3>No items available yet.</h3><p class="small">New dishes will be added soon.</p></div>`}</div>${pages>1?`<div class="page-controls"><button class="btn" onclick="changePage(-1)" ${S.page===0?'disabled':''}>← Previous</button><span class="small">${S.page+1} / ${pages}</span><button class="btn" onclick="changePage(1)" ${S.page===pages-1?'disabled':''}>Next →</button></div>`:''}</div></div>
 <div class="dock"><div class="point"><i>🛍️</i><div><strong>${cartCount()} items</strong><p class="small">Your current selection</p></div></div>
 <button class="review" onclick="review()"><b>Review your order →</b><span class="small" style="color:#e1eae1">${money(tot())}</span></button></div></main>${S.modal?modal():""}`}
 
-function openItem(id){if(!$(id))return;S.modal=id;S.mq=1;render()}
+function changePage(amount){if(!BluetoothUI.requireAccess())return;S.page+=amount;render()}
+function openItem(id){if(!BluetoothUI.requireAccess())return;if(!$(id))return;S.modal=id;S.mq=1;render()}
 function modal(){const item=$(S.modal);if(!item)return "";return `
 <div class="scrim" onclick="closeModal(event)"><section class="modal" onclick="event.stopPropagation()">
 <button class="x" onclick="closeModal()">×</button><div class="pic" style="background:${item.bg}">${item.e}</div>
@@ -259,11 +279,11 @@ function modal(){const item=$(S.modal);if(!item)return "";return `
 <div><strong>Ingredients</strong><p class="small">${item.ing}</p></div><h3>${money(item.p)}</h3>
 <div class="qty"><button onclick="changeModalQty(-1)">−</button><strong style="padding:0 10px">${S.mq}</strong><button onclick="changeModalQty(1)">+</button></div>
 <button class="btn p" onclick="addFromModal()">Add to order · ${money(item.p*S.mq)}</button><button class="btn" onclick="closeModal()">Continue browsing</button></div></section></div>`}
-function changeModalQty(amount){S.mq=Math.max(1,Math.min(20,S.mq+amount));render()}
-function addFromModal(){if(!S.modal)return;add(S.modal,S.mq);S.modal=null;S.mq=1}
-function closeModal(event){if(event&&event.target!==event.currentTarget)return;S.modal=null;render()}
+function changeModalQty(amount){if(!BluetoothUI.requireAccess())return;S.mq=Math.max(1,Math.min(20,S.mq+amount));render()}
+function addFromModal(){if(!BluetoothUI.requireAccess())return;if(!S.modal)return;const id=S.modal,qty=S.mq;S.modal=null;S.mq=1;add(id,qty)}
+function closeModal(event){if(!BluetoothUI.requireAccess())return;if(event&&event.target!==event.currentTarget)return;S.modal=null;render()}
 
-function review(){S.scr="review";S.modal=null;render()}
+function review(){go("review")}
 function reviewPage(){const entries=Object.entries(S.cart);return `${navbar()}<main class="pad"><span class="small">YOUR SELECTION</span>
 <h1 style="font-size:38px;margin:10px 0">Review your order.</h1><div class="two"><section class="card"><h2 style="font-size:25px">Your items</h2>
 ${entries.length?entries.map(([id,qty])=>{const item=$(id);if(!item)return "";return `
@@ -274,10 +294,12 @@ ${entries.length?entries.map(([id,qty])=>{const item=$(id);if(!item)return "";re
 <aside class="card stack"><h2 style="font-size:25px">Order summary</h2><div class="row"><span class="small">Items</span><strong>${cartCount()}</strong></div>
 <div class="row"><span class="small">Subtotal</span><strong>${money(tot())}</strong></div><div class="row"><span class="small">Service</span><strong>Not calculated</strong></div>
 <div class="row"><strong>Total</strong><strong>${money(tot())}</strong></div>
-<button class="btn p" onclick="place()" ${entries.length?"":"disabled"}>Continue →</button>
+<button class="btn p" onclick="confirmOrder()" ${entries.length?"":"disabled"}>Review & confirm →</button>
 <p class="small">Demo interface: order submission is not connected to a restaurant backend yet.</p></aside></div></main>`}
 
-function place(){if(!cartCount()){tip("Your order is empty");return}S.sent=false;go("sending");setTimeout(()=>{S.sent=true;if(S.scr==="sending")render()},1800)}
+function confirmOrder(){if(!BluetoothUI.requireAccess()||!cartCount())return;S.confirm=true;render()}
+function confirmation(){return `<div class="scrim"><section class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><span class="pill">FINAL REVIEW</span><h2 id="confirm-title">Ready to confirm?</h2><p>${cartCount()} items · <b>${money(tot())}</b></p><p class="small">This is a demo. No real order or payment will be sent.</p><button class="btn p" onclick="place()">Confirm demo order</button><button class="btn" onclick="S.confirm=false;render()">Keep editing</button></section></div>`}
+function place(){if(!BluetoothUI.requireAccess())return;if(!cartCount()){tip("Your order is empty");return}S.sent=false;const sessionId=BluetoothUI.sessionId();go("sending");S.orderTimer=setTimeout(()=>{if(!BluetoothUI.hasAccess()||BluetoothUI.sessionId()!==sessionId)return;S.sent=true;if(S.scr==="sending")render()},1800)}
 function sendingPage(){return `${navbar()}<main class="pad" style="max-width:650px"><div class="card stack" style="text-align:center;padding:40px">
 <div style="font-size:55px">${S.sent?"✓":'<span class="spin"></span>'}</div><h1 style="font-size:32px">${S.sent?"Demo complete":"Preparing your experience"}</h1>
 <p>${S.sent?"Your order flow demonstration is complete. No real order was sent.":"Please wait while the demo order screen is displayed."}</p>
@@ -286,18 +308,29 @@ function gamesPage(){return `${navbar()}<main class="pad"><span class="small">IN
 <div class="two"><section class="card stack"><span style="font-size:55px">🎮</span><h2 style="font-size:27px">Table games</h2>
 <p>Enjoy a small interactive experience while waiting for your meal.</p><span class="pill">DEMO FEATURE</span></section>
 <section class="card stack"><div class="qr">QR</div><h2 style="font-size:23px">Scan & play</h2><p class="small">QR functionality is not connected yet.</p></section></div></main>`}
-function rewardsPage(){return `${navbar()}<main class="pad"><span class="small">OLIVE REWARDS</span><h1 style="font-size:38px;margin:10px 0">Little moments, extra rewards.</h1>
-<div class="card stack" style="max-width:600px"><div style="font-size:50px">🌿</div><h2 style="font-size:27px">Welcome to Olive Rewards</h2>
-<p>Your rewards experience will appear here.</p><span class="pill">DEMO FEATURE</span><button class="btn p" onclick="browse()">Explore the menu</button></div></main>`}
+function rewardsPage(){if(BluetoothUI.isGuest())return `${navbar()}<main class="pad"><span class="small">OLIVE REWARDS</span><h1 style="font-size:38px;margin:10px 0">Enjoy your guest visit.</h1><div class="card stack" style="max-width:600px"><div style="font-size:50px">🌿</div><h2 style="font-size:27px">Collect rewards with your phone.</h2><p>Guest visits do not earn or save points. Connect Bluetooth on your next visit to earn 10 points per connection.</p><button class="btn p" onclick="browse()">Explore the menu</button></div></main>`;const user=BluetoothUI.user();return `${navbar()}<main class="pad"><span class="small">OLIVE REWARDS</span><h1 style="font-size:38px;margin:10px 0">Little moments, extra rewards.</h1>
+<div class="card stack" style="max-width:600px"><div style="font-size:50px">🌿</div><h2 style="font-size:27px">${BluetoothUI.escape(user?.username || '')}</h2>
+<strong style="font-size:42px">${user?.points || 0} points</strong><p>You have connected ${user?.connections || 0} time(s). Every successful Bluetooth connection adds 10 points.</p>
+<p class="small">Your points are saved on this computer and stay with your phone's permanent ID.</p><button class="btn p" onclick="browse()">Explore the menu</button></div></main>`}
 
-function gestureSidebar(){return `<aside class="gesture-sidebar"><h2>Gesture Guide</h2><p class="subtitle">CONTROL YOUR MENU WITH YOUR HANDS</p><div class="gesture-list">
-${GESTURES.map(g=>`<div class="gesture-item"><div class="hand">${g.icon}</div><div><strong>${g.name}</strong><span>${g.action}</span></div></div>`).join("")}
-</div></aside>`}
+function gestureSidebar(){return `<aside class="gesture-sidebar"><span class="pill">YOUR HAND CONTROLS</span><h2 style="margin-top:12px">Point. Pinch. Enjoy.</h2>
+<div class="camera-card">${BluetoothUI.cameraEnabled()?'<img class="camera-frame" src="http://127.0.0.1:8765/stream" alt="Live hand tracking camera">':'<div class="camera-placeholder">Camera off<br>Touch and mouse are available</div>'}
+<button class="btn camera-toggle" onclick="BluetoothUI.setCamera(${!BluetoothUI.cameraEnabled()})">${BluetoothUI.cameraEnabled()?'Stop camera':'Start hand control'}</button></div>
+<div id="hand-status" class="hand-status" role="status">${BluetoothUI.cameraEnabled()?'Show one hand to the camera':'Choose Start hand control to begin'}</div>
+<div class="hand-steps"><div class="hand-step"><span>☝</span><span><b>Point to aim</b><small>Move one index finger. The gold outline shows your target.</small></span></div>
+<div class="hand-step"><span>🤏</span><span><b>Pinch to select</b><small>Touch thumb and index, then release. Works on every button.</small></span></div>
+<div class="hand-step"><span>✌</span><span><b>Two fingers to scroll</b><small>Move index and middle finger up to scroll down; down to scroll up.</small></span></div>
+<div class="hand-step"><span>✊</span><span><b>Hold a fist to go back</b><small>Hold for a moment, then relax. Open palm pauses the pointer.</small></span></div></div>
+<p class="camera-status">${BluetoothUI.escape(BluetoothUI.cameraError()) || 'Use one hand, keep it in view and avoid bright light behind you. Q stops the camera.'}</p></aside>`;}
 
 function render(){
 const app=document.getElementById("app");if(!app)return;
+const connected=BluetoothUI.hasAccess();
+if(!connected)BluetoothUI.resetPage();
+document.body.classList.toggle("bt-locked",!connected);
 let page="";
 switch(S.scr){
+case "bluetooth":page=BluetoothUI.page();break;
 case "welcome":page=welcome();break;
 case "gate":page=gatePage();break;
 case "browse":page=browsePage();break;
@@ -305,51 +338,22 @@ case "review":page=reviewPage();break;
 case "sending":page=sendingPage();break;
 case "games":page=gamesPage();break;
 case "rewards":page=rewardsPage();break;
-default:S.scr="welcome";page=welcome();
+default:S.scr=connected?"welcome":"bluetooth";page=connected?welcome():BluetoothUI.page();
 }
-app.innerHTML=page+gestureSidebar();
+const previousPreview=app.querySelector?.('.camera-frame');
+app.innerHTML=BluetoothUI.sessionBar()+page+gestureSidebar()+(connected&&S.confirm?confirmation():"")+BluetoothUI.overlay();
+const replacement=app.querySelector?.('.camera-frame');
+if(previousPreview&&replacement)replacement.replaceWith(previousPreview);
+window.HandUI?.afterRender();
 if(S.toast){const toast=document.createElement("div");toast.className="toast";toast.textContent=S.toast;app.appendChild(toast)}
 }
 
-/* Python / Socket.IO can call window.handleGesture("GESTURE_NAME") */
+
+
 window.handleGesture=function(gesture){
-if(!gesture||typeof gesture!=="string")return;
-const g=gesture.trim().toUpperCase();
-if(g==="OPEN_PALM"){if(S.scr==="welcome")go("gate");else if(S.scr==="gate")browse();else if(S.scr==="browse"){if(S.modal){S.modal=null;render()}else review()}return}
-if(g==="CLOSED_FIST"){if(S.modal){S.modal=null;render()}else if(S.scr!=="welcome")go("browse");return}
-if(S.scr==="browse"){
-if(g==="SWIPE_RIGHT"){const i=CATS.indexOf(S.cat);setCategory(CATS[(i+1)%CATS.length]);return}
-if(g==="SWIPE_RIGHT"){
-const i=CATS.indexOf(S.cat);
-setCategory(CATS[(i+1)%CATS.length]);
-return;
-}
-
-if(g==="SWIPE_LEFT"){
-const i=CATS.indexOf(S.cat);
-setCategory(CATS[(i-1+CATS.length)%CATS.length]);
-return;
-}
-
-if(g==="SWIPE_DOWN"){
-const i=CATS.indexOf(S.cat);
-setCategory(CATS[(i+1)%CATS.length]);
-return;
-}
-
-if(g==="SWIPE_UP"){
-const i=CATS.indexOf(S.cat);
-setCategory(CATS[(i-1+CATS.length)%CATS.length]);
-return;
-}
-if(g==="SELECT_PRODUCT"||g==="V_SHAPE"){const item=ITEMS.find(x=>x.category===S.cat);if(item)openItem(item.id);return}
-if(g==="THUMBS_UP"){if(S.modal)add(S.modal);else{const item=ITEMS.find(x=>x.category===S.cat);if(item)add(item.id)}return}
-if(g==="THUMBS_DOWN"){if(S.modal){S.modal=null;render()}else tip("Product declined");return}
-if(g==="C_SHAPE"){review();return}
-if(g==="OK_SIGN"){if(cartCount())place();else tip("Your order is empty");return}
-if(g==="ZIGZAG"){go("games");return}
-}
-if(S.scr==="review"&&g==="OK_SIGN"){if(cartCount())place();return}
+if(gesture&&typeof gesture==='object'){window.HandUI?.handle(gesture);return;}
+if(!BluetoothUI.requireAccess())return;
+window.HandUI?.legacy(gesture);
 };
 render();
 </script>

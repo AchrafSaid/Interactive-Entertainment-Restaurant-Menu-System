@@ -6,6 +6,13 @@ __pycache__/
 .idea/
 .vscode/
 
+# Local runtimes, packaged output and customer points
+.venv-gestures/
+build/
+release/
+data/
+*.spec
+
 # Python virtual environments
 venv/
 .venv/
