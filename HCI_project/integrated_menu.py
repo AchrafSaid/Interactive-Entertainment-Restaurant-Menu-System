@@ -1,446 +1,567 @@
 
+from pathlib import Path
+import threading
+import time
+import math
+
 import cv2
 import mediapipe as mp
-import math
-import time
-import socket
+import webview
 
-from swipe_detector import SwipeDetector
 
+# ==========================================
+# CONFIGURATION
+# ==========================================
 
-# =====================================
-# 1. SOCKET CLIENT
-# =====================================
+CAMERA_INDEX = 0
+FRAME_WIDTH = 640
+FRAME_HEIGHT = 480
 
-HOST = "127.0.0.1"
-PORT = 5000
+STABLE_FRAMES = 8
+GESTURE_COOLDOWN = 1.0
 
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+MIN_SWIPE_DISTANCE = 100
+MAX_SWIPE_DURATION = 0.9
+MIN_SWIPE_DURATION = 0.12
+SWIPE_COOLDOWN = 0.8
+SWIPE_STOP_TIME = 0.12
 
-try:
-    client.connect((HOST, PORT))
-    print("Connected to Restaurant Menu Server!")
+SELECT_HOLD_TIME = 0.7
 
-except ConnectionRefusedError:
-    print("Cannot connect to Menu Server!")
-    print("Please run menu_server_gui.py first.")
-    client.close()
-    raise SystemExit
+# ==========================================
+# APPLICATION
+# ==========================================
 
+class OliveTableApp:
 
-def send_gesture(gesture):
-    try:
-        message = gesture + "\n"
-        client.sendall(message.encode("utf-8"))
+    def __init__(self):
 
-        response = client.recv(1024).decode("utf-8")
+        self.window = None
+        self.running = False
 
-        if not response:
-            raise ConnectionResetError("Server disconnected.")
+        self.cap = None
+        self.hands = None
 
-        print("Server Response:", response.strip())
+        self.last_pose = None
+        self.pose_frames = 0
+        self.last_gesture_time = 0
+        self.sent_pose = None
 
-    except (ConnectionResetError, BrokenPipeError, OSError) as error:
-        print("Error sending gesture:", error)
-        raise
+        self.last_swipe_time = 0
 
+        self.swipe_active = False
+        self.swipe_start = None
+        self.swipe_previous = None
+        self.swipe_started_at = 0
+        self.swipe_last_motion = 0
 
-# =====================================
-# 2. SWIPE DETECTOR
-# =====================================
+        self.index_started_at = None
+        self.index_start_point = None
+        self.select_sent = False
 
-swipe_detector = SwipeDetector()
+        self.status = "Show your hand"
 
-print("Swipe Detector Ready!")
+    # ======================================
+    # SEND TO HTML
+    # ======================================
 
+    def send_gesture(self, gesture):
 
-# =====================================
-# 3. MEDIAPIPE HAND TRACKING
-# =====================================
+        if not self.window:
+            return
 
-mp_hands = mp.solutions.hands
-mp_drawing = mp.solutions.drawing_utils
+        now = time.monotonic()
 
-hands = mp_hands.Hands(
-    static_image_mode=False,
-    max_num_hands=1,
-    min_detection_confidence=0.7,
-    min_tracking_confidence=0.7
-)
+        if gesture.startswith("SWIPE_"):
 
+            if now - self.last_swipe_time < SWIPE_COOLDOWN:
+                return
 
-# =====================================
-# 4. STATIC GESTURE DETECTION
-# =====================================
+            self.last_swipe_time = now
 
-def detect_static_gesture(hand):
+        print("Gesture:", gesture)
+        self.status = gesture
 
-    finger_tips = [8, 12, 16, 20]
-    finger_pips = [6, 10, 14, 18]
+        try:
 
-    fingers = []
-
-    for tip, pip in zip(finger_tips, finger_pips):
-
-        extended = (
-            hand.landmark[tip].y <
-            hand.landmark[pip].y
-        )
-
-        fingers.append(extended)
-
-    extended_fingers = sum(fingers)
-
-    # OPEN PALM
-    if extended_fingers == 4:
-        return "OPEN_PALM"
-
-    # CLOSED FIST
-    elif extended_fingers == 0:
-        return "CLOSED_FIST"
-
-    # SELECT PRODUCT
-    elif (
-        fingers[0]
-        and not fingers[1]
-        and not fingers[2]
-        and not fingers[3]
-    ):
-        return "SELECT_PRODUCT"
-
-    return None
-
-
-# =====================================
-# 5. CAMERA
-# =====================================
-
-cap = cv2.VideoCapture(0)
-
-if not cap.isOpened():
-
-    print("Cannot open camera")
-
-    hands.close()
-    client.close()
-
-    raise SystemExit
-
-
-# =====================================
-# 6. GESTURE SETTINGS
-# =====================================
-
-points = []
-
-recording = False
-
-last_position = None
-last_movement_time = 0
-
-IDLE_TIME = 0.4
-MOVEMENT_THRESHOLD = 8
-MIN_POINTS = 5
-COOLDOWN_TIME = 1.0
-
-# Static gesture stability
-candidate_pose = None
-stable_frames = 0
-
-STABLE_FRAMES_REQUIRED = 8
-
-last_sent_pose = None
-
-# Menu state
-menu_open = False
-
-last_result = "Waiting..."
-
-cooldown = 0
-
-
-# =====================================
-# 7. START SYSTEM
-# =====================================
-
-print("\n================================")
-print("RESTAURANT MENU GESTURE CONTROL")
-print("================================")
-
-print("OPEN PALM: Open Menu")
-print("CLOSED FIST: Close Menu")
-print("ONE FINGER: Select Product")
-print("SWIPE RIGHT: Next Category")
-print("SWIPE LEFT: Previous Category")
-print("Press Q to quit.")
-
-
-# =====================================
-# 8. MAIN LOOP
-# =====================================
-
-try:
-
-    while True:
-
-        success, frame = cap.read()
-
-        if not success:
-            print("Failed to read camera frame.")
-            break
-
-        frame = cv2.flip(frame, 1)
-
-        rgb = cv2.cvtColor(
-            frame,
-            cv2.COLOR_BGR2RGB
-        )
-
-        results = hands.process(rgb)
-
-        height, width, _ = frame.shape
-
-        current_time = time.monotonic()
-
-        current_position = None
-        static_gesture = None
-
-        # ---------------------------------
-        # HAND DETECTION
-        # ---------------------------------
-
-        if results.multi_hand_landmarks:
-
-            hand = results.multi_hand_landmarks[0]
-
-            mp_drawing.draw_landmarks(
-                frame,
-                hand,
-                mp_hands.HAND_CONNECTIONS
+            self.window.evaluate_js(
+                "window.handleGesture("
+                + repr(gesture)
+                + ")"
             )
 
-            static_gesture = detect_static_gesture(hand)
+        except Exception as error:
 
-            # Track index fingertip
-            tip = hand.landmark[8]
+            print("JavaScript error:", error)
 
-            x = int(tip.x * width)
-            y = int(tip.y * height)
+    # ======================================
+    # DISTANCE
+    # ======================================
 
-            current_position = (x, y)
+    @staticmethod
+    def distance(a, b):
 
-        # ---------------------------------
-        # STATIC GESTURE RECOGNITION
-        # ---------------------------------
+        return math.hypot(
+            a[0] - b[0],
+            a[1] - b[1]
+        )
 
-        if static_gesture is not None:
+    # ======================================
+    # FINGER DETECTION
+    # ======================================
 
-            if static_gesture == candidate_pose:
-                stable_frames += 1
+    @staticmethod
+    def fingers_up(hand):
+
+        lm = hand.landmark
+
+        # Finger tips compared with middle joints.
+        fingers = [
+            lm[8].y < lm[6].y,
+            lm[12].y < lm[10].y,
+            lm[16].y < lm[14].y,
+            lm[20].y < lm[18].y
+        ]
+
+        # Thumb direction is evaluated using x position.
+        # This is a basic camera-facing heuristic.
+        thumb_extended = abs(lm[4].x - lm[2].x) > 0.055
+
+        return thumb_extended, fingers
+
+    # ======================================
+    # POSE DETECTION
+    # ======================================
+
+    @staticmethod
+    def detect_pose(hand):
+
+        lm = hand.landmark
+
+        thumb, fingers = OliveTableApp.fingers_up(hand)
+
+        thumb_index = math.hypot(
+            lm[4].x - lm[8].x,
+            lm[4].y - lm[8].y
+        )
+
+        # OPEN PALM
+        if all(fingers):
+            return "OPEN_PALM"
+
+        # CLOSED FIST
+        if not any(fingers) and not thumb:
+            return "CLOSED_FIST"
+
+        # THUMBS UP / DOWN
+        if thumb and not any(fingers):
+
+            if lm[4].y < lm[3].y - 0.04:
+                return "THUMBS_UP"
+
+            if lm[4].y > lm[3].y + 0.04:
+                return "THUMBS_DOWN"
+
+        # OK SIGN
+        if (
+            thumb_index < 0.055
+            and fingers[1]
+            and fingers[2]
+            and fingers[3]
+        ):
+            return "OK_SIGN"
+
+        # INDEX FINGER ONLY
+        if fingers == [True, False, False, False]:
+            return "SELECT_PRODUCT"
+
+        return None
+
+    # ======================================
+    # RESET TRACKING
+    # ======================================
+
+    def reset_tracking(self):
+
+        self.swipe_active = False
+        self.swipe_start = None
+        self.swipe_previous = None
+        self.swipe_started_at = 0
+        self.swipe_last_motion = 0
+
+        self.index_started_at = None
+        self.index_start_point = None
+        self.select_sent = False
+
+    # ======================================
+    # SWIPE DETECTION
+    # ======================================
+
+    def detect_swipe(self, point, now):
+
+        if self.swipe_start is None:
+
+            self.swipe_start = point
+            self.swipe_previous = point
+            self.swipe_started_at = now
+            self.swipe_last_motion = now
+            self.swipe_active = False
+
+            return None
+
+        movement = self.distance(
+            point,
+            self.swipe_previous
+        )
+
+        # Compare current position with previous frame.
+        if movement >= 3:
+            self.swipe_last_motion = now
+
+        self.swipe_previous = point
+
+        dx = point[0] - self.swipe_start[0]
+        dy = point[1] - self.swipe_start[1]
+
+        total_distance = math.hypot(dx, dy)
+
+        duration = now - self.swipe_started_at
+
+        stopped = (
+            now - self.swipe_last_motion >= SWIPE_STOP_TIME
+        )
+
+        if (
+            total_distance >= MIN_SWIPE_DISTANCE
+            and MIN_SWIPE_DURATION <= duration <= MAX_SWIPE_DURATION
+            and stopped
+        ):
+
+            if abs(dx) > abs(dy) * 1.2:
+
+                gesture = (
+                    "SWIPE_RIGHT" if dx > 0
+                    else "SWIPE_LEFT"
+                )
 
             else:
-                candidate_pose = static_gesture
-                stable_frames = 1
 
-            if (
-                stable_frames >= STABLE_FRAMES_REQUIRED
-                and current_time >= cooldown
-            ):
+                gesture = (
+                    "SWIPE_DOWN" if dy > 0
+                    else "SWIPE_UP"
+                )
 
-                # OPEN MENU only if closed
-                if (
-                    static_gesture == "OPEN_PALM"
-                    and not menu_open
-                ):
+            self.swipe_active = True
 
-                    print("\nDetected: OPEN_PALM")
-                    send_gesture("OPEN_PALM")
+            return gesture
 
-                    menu_open = True
-                    last_result = "OPEN_PALM"
+        if duration > MAX_SWIPE_DURATION:
 
-                    recording = False
-                    points.clear()
+            self.swipe_start = point
+            self.swipe_previous = point
+            self.swipe_started_at = now
+            self.swipe_last_motion = now
 
-                    cooldown = current_time + 0.6
+        return None
 
-                # CLOSE MENU only if open
-                elif (
-                    static_gesture == "CLOSED_FIST"
-                    and menu_open
-                ):
+    # ======================================
+    # SELECT PRODUCT
+    # ======================================
 
-                    print("\nDetected: CLOSED_FIST")
-                    send_gesture("CLOSED_FIST")
+    def detect_select(self, point, now):
 
-                    menu_open = False
-                    last_result = "CLOSED_FIST"
+        if self.index_started_at is None:
 
-                    recording = False
-                    points.clear()
+            self.index_started_at = now
+            self.index_start_point = point
+            self.select_sent = False
 
-                    cooldown = current_time + 0.6
+            return None
 
-                # SELECT PRODUCT
-                elif (
-                    static_gesture == "SELECT_PRODUCT"
-                    and last_sent_pose != "SELECT_PRODUCT"
-                ):
-
-                    print("\nDetected: SELECT_PRODUCT")
-                    send_gesture("SELECT_PRODUCT")
-
-                    last_sent_pose = "SELECT_PRODUCT"
-                    last_result = "SELECT_PRODUCT"
-
-                    cooldown = current_time + 0.6
-
-        else:
-
-            candidate_pose = None
-            stable_frames = 0
-            last_sent_pose = None
-
-        # ---------------------------------
-        # SWIPE MOVEMENT RECORDING
-        # ---------------------------------
+        movement = self.distance(
+            point,
+            self.index_start_point
+        )
 
         if (
-            static_gesture is None
-            and current_position is not None
+            movement < 30
+            and now - self.index_started_at >= SELECT_HOLD_TIME
+            and not self.select_sent
         ):
 
-            if last_position is not None:
+            self.select_sent = True
 
-                dx = current_position[0] - last_position[0]
-                dy = current_position[1] - last_position[1]
+            return "SELECT_PRODUCT"
 
-                distance = math.hypot(dx, dy)
+        if movement >= 30:
 
-                # Start recording movement
-                if (
-                    not recording
-                    and distance >= MOVEMENT_THRESHOLD
-                    and current_time >= cooldown
-                ):
+            self.index_started_at = now
+            self.index_start_point = point
+            self.select_sent = False
 
-                    recording = True
-                    points = [last_position]
+        return None
 
-                    last_movement_time = current_time
+    # ======================================
+    # STATIC GESTURES
+    # ======================================
 
-                    print("\nRecording Swipe...")
+    def process_static_pose(self, pose, now):
 
-                # Save movement positions
-                if recording:
+        if pose is None:
 
-                    points.append(current_position)
+            self.last_pose = None
+            self.pose_frames = 0
+            self.sent_pose = None
 
-                    if distance >= MOVEMENT_THRESHOLD:
-                        last_movement_time = current_time
+            return
 
-            last_position = current_position
+        if pose != self.last_pose:
 
-        else:
+            self.last_pose = pose
+            self.pose_frames = 1
+            self.sent_pose = None
 
-            last_position = current_position
+            return
 
-        # ---------------------------------
-        # RECOGNIZE SWIPE
-        # ---------------------------------
+        self.pose_frames += 1
 
         if (
-            recording
-            and current_time - last_movement_time >= IDLE_TIME
+            self.pose_frames >= STABLE_FRAMES
+            and self.sent_pose != pose
+            and now - self.last_gesture_time >= GESTURE_COOLDOWN
         ):
 
-            recording = False
+            self.send_gesture(pose)
 
-            if len(points) >= MIN_POINTS:
+            self.last_gesture_time = now
+            self.sent_pose = pose
 
-                swipe = swipe_detector.detect_path(points)
+    # ======================================
+    # CAMERA LOOP
+    # ======================================
 
-                if swipe in ("SWIPE_RIGHT", "SWIPE_LEFT"):
+    def camera_loop(self):
 
-                    last_result = swipe
+        self.cap = cv2.VideoCapture(CAMERA_INDEX)
 
-                    print("\nDetected:", swipe)
+        self.cap.set(
+            cv2.CAP_PROP_FRAME_WIDTH,
+            FRAME_WIDTH
+        )
 
-                    send_gesture(swipe)
+        self.cap.set(
+            cv2.CAP_PROP_FRAME_HEIGHT,
+            FRAME_HEIGHT
+        )
+
+        if not self.cap.isOpened():
+
+            print("ERROR: Camera could not open.")
+            self.running = False
+            return
+
+        mp_hands = mp.solutions.hands
+        mp_draw = mp.solutions.drawing_utils
+
+        self.hands = mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=1,
+            model_complexity=0,
+            min_detection_confidence=0.7,
+            min_tracking_confidence=0.7
+        )
+
+        print("Camera started.")
+
+        try:
+
+            while self.running:
+
+                success, frame = self.cap.read()
+
+                if not success:
+                    continue
+
+                frame = cv2.flip(frame, 1)
+
+                rgb = cv2.cvtColor(
+                    frame,
+                    cv2.COLOR_BGR2RGB
+                )
+
+                results = self.hands.process(rgb)
+
+                now = time.monotonic()
+
+                hand = None
+
+                if results.multi_hand_landmarks:
+                    hand = results.multi_hand_landmarks[0]
+
+                if hand is None:
+
+                    self.process_static_pose(None, now)
+                    self.reset_tracking()
+
+                    self.status = "Show your hand"
 
                 else:
 
-                    last_result = "Not a Swipe"
+                    mp_draw.draw_landmarks(
+                        frame,
+                        hand,
+                        mp_hands.HAND_CONNECTIONS
+                    )
 
-                    print("Movement was not recognized as a swipe.")
+                    lm = hand.landmark
 
-            else:
+                    point = (
+                        int(lm[8].x * frame.shape[1]),
+                        int(lm[8].y * frame.shape[0])
+                    )
 
-                last_result = "Movement Too Short"
+                    thumb, fingers = self.fingers_up(hand)
 
-                print("Movement too short.")
+                    index_only = (
+                        fingers == [True, False, False, False]
+                    )
 
-            points.clear()
+                    if index_only:
 
-            cooldown = current_time + COOLDOWN_TIME
+                        # Detect swipe first.
+                        swipe = self.detect_swipe(
+                            point,
+                            now
+                        )
 
-        # ---------------------------------
-        # CAMERA DISPLAY
-        # ---------------------------------
+                        if swipe:
 
-        cv2.putText(
-            frame,
-            "Gesture: " + last_result,
-            (10, 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (0, 255, 255),
-            2
+                            self.send_gesture(swipe)
+
+                            self.reset_tracking()
+
+                        else:
+
+                            # Select only when index finger stays still.
+                            select = self.detect_select(
+                                point,
+                                now
+                            )
+
+                            if select:
+                                self.send_gesture(select)
+
+                    else:
+
+                        self.reset_tracking()
+
+                        pose = self.detect_pose(hand)
+
+                        self.process_static_pose(
+                            pose,
+                            now
+                        )
+
+                    cv2.circle(
+                        frame,
+                        point,
+                        8,
+                        (0, 255, 0),
+                        -1
+                    )
+
+                cv2.putText(
+                    frame,
+                    "OLIVE / TABLE",
+                    (15, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 255, 0),
+                    2
+                )
+
+                cv2.putText(
+                    frame,
+                    "Gesture: " + self.status,
+                    (15, 65),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.55,
+                    (255, 255, 255),
+                    2
+                )
+
+                cv2.imshow(
+                    "Olive / Table - Camera",
+                    frame
+                )
+
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+
+                    self.running = False
+                    break
+
+        finally:
+
+            if self.cap:
+                self.cap.release()
+
+            if self.hands:
+                self.hands.close()
+
+            cv2.destroyAllWindows()
+
+            print("Camera stopped.")
+
+    # ======================================
+    # START APP
+    # ======================================
+
+    def start(self):
+
+        html_file = Path(__file__).with_name(
+            "olive_table_with_gesture_sidebar.html"
         )
 
-        cv2.putText(
-            frame,
-            "Menu: " + ("OPEN" if menu_open else "CLOSED"),
-            (10, 65),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (0, 255, 0),
-            2
+        if not html_file.exists():
+
+            raise FileNotFoundError(
+                f"HTML file not found: {html_file}"
+            )
+
+        self.running = True
+
+        self.window = webview.create_window(
+            "Olive / Table",
+            html_file.resolve().as_uri(),
+            width=1200,
+            height=800,
+            min_size=(800, 600),
+            background_color="#f5f2ea"
         )
 
-        cv2.imshow(
-            "Restaurant Menu Control",
-            frame
-        )
+        self.window.events.loaded += self.on_loaded
 
-        key = cv2.waitKey(1) & 0xFF
+        try:
 
-        if key == ord("q"):
-            break
+            webview.start(debug=False)
 
+        finally:
 
-# =====================================
-# 9. ERROR HANDLING
-# =====================================
+            self.running = False
 
-except (ConnectionResetError, BrokenPipeError, OSError) as error:
+    def on_loaded(self):
 
-    print("Connection error:", error)
-
-except Exception as error:
-
-    print("Unexpected error:", error)
+        threading.Thread(
+            target=self.camera_loop,
+            daemon=True
+        ).start()
 
 
-# =====================================
-# 10. CLEANUP
-# =====================================
+# ==========================================
+# MAIN
+# ==========================================
 
-finally:
+if __name__ == "__main__":
 
-    cap.release()
-    hands.close()
-    cv2.destroyAllWindows()
-    client.close()
-
-    print("\nRestaurant Menu Client Stopped.")
+    app = OliveTableApp()
+    app.start()

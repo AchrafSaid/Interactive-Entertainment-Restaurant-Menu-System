@@ -1,15 +1,83 @@
 
 import cv2
 import mediapipe as mp
+import socket
+import time
 import math
 
-from dollarpy import Recognizer, Template, Point
-from gesture_storage import save_templates, load_templates
+from dollarpy import Recognizer, Point
+from gesture_storage import load_templates
 
 
-# MediaPipe setup
+# =====================================
+# 1. CONFIGURATION
+# =====================================
+
+HOST = "127.0.0.1"
+PORT = 5000
+
+CAMERA_INDEX = 0
+
+MIN_POINTS = 10
+MOVEMENT_THRESHOLD = 3
+
+GESTURE_PAUSE = 0.8
+GESTURE_COOLDOWN = 1.0
+
+MIN_SCORE = 0.60
+
+
+# =====================================
+# 2. LOAD DOLLARPY TEMPLATES
+# =====================================
+
+templates = load_templates()
+
+if not templates:
+    print("No gesture templates found!")
+    raise SystemExit
+
+recognizer = Recognizer(templates)
+
+print("DollarPy Recognizer Ready!")
+
+
+# =====================================
+# 3. TCP SOCKET CLIENT
+# =====================================
+
+client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client.settimeout(3)
+
+try:
+    client.connect((HOST, PORT))
+    client.settimeout(None)
+    print("Connected to Olive / Table Server!")
+
+except OSError as error:
+    print("Could not connect to server:", error)
+    print("Start menu_server.py first.")
+    client.close()
+    raise SystemExit
+
+
+def send_gesture(gesture):
+    try:
+        client.sendall((gesture + "\n").encode("utf-8"))
+        response = client.recv(1024).decode("utf-8").strip()
+        print("Server:", response)
+
+    except OSError as error:
+        print("Socket communication error:", error)
+        raise SystemExit
+
+
+# =====================================
+# 4. MEDIAPIPE HAND TRACKING
+# =====================================
+
 mp_hands = mp.solutions.hands
-mp_drawing = mp.solutions.drawing_utils
+mp_draw = mp.solutions.drawing_utils
 
 hands = mp_hands.Hands(
     static_image_mode=False,
@@ -18,239 +86,222 @@ hands = mp_hands.Hands(
     min_tracking_confidence=0.7
 )
 
-# Camera setup
-cap = cv2.VideoCapture(0)
+camera = cv2.VideoCapture(CAMERA_INDEX)
 
-if not cap.isOpened():
-    print("ERROR: Cannot open camera")
-    exit()
-
-
-# Load previously saved gestures
-templates = load_templates()
-
-recognizer = Recognizer(templates) if templates else None
-
-points = []
-recording = False
-recording_name = ""
-
-last_gesture = "No gesture tested"
-last_score = 0.0
+if not camera.isOpened():
+    print("Could not open camera!")
+    hands.close()
+    client.close()
+    raise SystemExit
 
 
-def start_recording(name):
-    global recording, recording_name, points
+# =====================================
+# 5. GESTURE VARIABLES
+# =====================================
 
-    recording = True
-    recording_name = name
-    points = []
+gesture_points = []
 
-    print(f"\nRecording started: {name}")
-    print("Draw your gesture, then press SPACE to finish.")
+previous_point = None
 
-
-def convert_points(raw_points):
-    return [
-        Point(float(x), float(y))
-        for x, y in raw_points
-    ]
+last_movement_time = time.time()
+last_gesture_time = 0
 
 
-def finish_recording():
-    global recording, recognizer
-    global templates, last_gesture, last_score
+# =====================================
+# 6. DOLLARPY RECOGNITION
+# =====================================
 
-    recording = False
+def recognize_gesture(points):
+    global last_gesture_time
 
-    if len(points) < 10:
-        print("Not enough points! Please record again.")
+    if len(points) < MIN_POINTS:
+        print("Not enough points:", len(points))
         return
 
-    dollar_points = convert_points(points)
+    dollar_points = [
+        Point(float(x), float(y))
+        for x, y in points
+    ]
 
-    if recording_name == "TEST":
+    try:
+        scores = []
 
-        if not templates:
-            print("No saved gestures available!")
+        for template in templates:
+            test_recognizer = Recognizer([template])
+            name, score = test_recognizer.recognize(dollar_points)
+
+            scores.append((template.name, score))
+
+        scores.sort(key=lambda item: item[1], reverse=True)
+
+        print("\nTop 5 Template Matches:")
+
+        for name, score in scores[:5]:
+            print(f"{name}: {score:.3f}")
+
+        gesture_name, score = recognizer.recognize(dollar_points)
+
+        if gesture_name is None or score < MIN_SCORE:
+            print(f"No Match | Score: {score:.3f}")
             return
 
-        recognizer = Recognizer(templates)
-        result = recognizer.recognize(dollar_points)
-
-        if result:
-            last_gesture = result[0]
-            last_score = float(result[1])
-
-            print("\nDetected Gesture:", last_gesture)
-            print("Recognition Score:", round(last_score, 3))
-
-        else:
-            last_gesture = "No Match"
-            last_score = 0.0
-            print("No gesture recognized.")
-
-    else:
-        new_template = Template(recording_name, dollar_points)
-
-        # Replace an existing template with the same name
-        templates = [
-            template for template in templates
-            if template.name != recording_name
-        ]
-
-        templates.append(new_template)
-
-        # Save templates to JSON
-        save_templates(templates)
-
-        recognizer = Recognizer(templates)
-
-        print(f"\nTemplate saved: {recording_name}")
-        print("Total templates:", len(templates))
-
-    points.clear()
-
-
-print("\n=================================")
-print("DOLLARPY GESTURE RECOGNITION")
-print("=================================")
-print("V = Record V Shape")
-print("Z = Record Zigzag")
-print("T = Record a test gesture")
-print("SPACE = Finish recording")
-print("Q = Quit")
-print("=================================\n")
-
-
-while True:
-
-    success, frame = cap.read()
-
-    if not success:
-        break
-
-    frame = cv2.flip(frame, 1)
-
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = hands.process(rgb_frame)
-
-    height, width, _ = frame.shape
-
-    if results.multi_hand_landmarks:
-
-        hand_landmarks = results.multi_hand_landmarks[0]
-
-        mp_drawing.draw_landmarks(
-            frame,
-            hand_landmarks,
-            mp_hands.HAND_CONNECTIONS
+        print(
+            f"Recognized: {gesture_name} | "
+            f"Score: {score:.3f}"
         )
 
-        index_tip = hand_landmarks.landmark[8]
+        now = time.time()
 
-        x = int(index_tip.x * width)
-        y = int(index_tip.y * height)
+        if (
+            gesture_name.startswith("C_SHAPE")
+            and now - last_gesture_time >= GESTURE_COOLDOWN
+        ):
+            send_gesture("C_SHAPE")
+            last_gesture_time = now
 
-        cv2.circle(frame, (x, y), 8, (0, 255, 0), -1)
+    except Exception as error:
+        print("Recognition error:", error)
 
-        if recording:
 
-            if not points:
-                points.append((x, y))
+# =====================================
+# 7. MAIN CAMERA LOOP
+# =====================================
 
-            else:
-                previous_x, previous_y = points[-1]
+print("\nCamera started!")
+print("Draw letter C using your index finger.")
+print("Press Q to quit.\n")
 
-                distance = math.hypot(
-                    x - previous_x,
-                    y - previous_y
-                )
 
-                if distance >= 3:
-                    points.append((x, y))
+try:
 
-    # Draw gesture path
-    if len(points) > 1:
+    while camera.isOpened():
 
-        for i in range(1, len(points)):
+        success, frame = camera.read()
 
-            cv2.line(
+        if not success:
+            continue
+
+        frame = cv2.flip(frame, 1)
+
+        rgb_frame = cv2.cvtColor(
+            frame,
+            cv2.COLOR_BGR2RGB
+        )
+
+        results = hands.process(rgb_frame)
+
+        current_time = time.time()
+
+        # =================================
+        # 8. HAND DETECTION
+        # =================================
+
+        if results.multi_hand_landmarks:
+
+            hand_landmarks = results.multi_hand_landmarks[0]
+
+            mp_draw.draw_landmarks(
                 frame,
-                points[i - 1],
-                points[i],
-                (255, 0, 0),
-                3
+                hand_landmarks,
+                mp_hands.HAND_CONNECTIONS
             )
 
-    # Display information
-    status = (
-        f"RECORDING: {recording_name}"
-        if recording else "READY"
-    )
+            # Index finger tip
+            index_tip = hand_landmarks.landmark[8]
 
-    cv2.putText(
-        frame,
-        status,
-        (10, 30),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.7,
-        (0, 255, 0),
-        2
-    )
+            x = int(index_tip.x * frame.shape[1])
+            y = int(index_tip.y * frame.shape[0])
 
-    cv2.putText(
-        frame,
-        f"Points: {len(points)}",
-        (10, 60),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (255, 255, 255),
-        2
-    )
+            cv2.circle(
+                frame,
+                (x, y),
+                8,
+                (0, 255, 0),
+                -1
+            )
 
-    cv2.putText(
-        frame,
-        f"Templates: {len(templates)}",
-        (10, 90),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (255, 255, 255),
-        2
-    )
+            current_point = (x, y)
 
-    cv2.putText(
-        frame,
-        f"Last Result: {last_gesture}",
-        (10, 120),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (0, 255, 255),
-        2
-    )
+            # =================================
+            # 9. COLLECT GESTURE POINTS
+            # =================================
 
-    cv2.imshow("DollarPy Gesture Recognition", frame)
+            if previous_point is None:
+                previous_point = current_point
 
-    key = cv2.waitKey(1) & 0xFF
+            if not gesture_points:
 
-    if key == ord('v') and not recording:
-        start_recording("V_SHAPE")
+                gesture_points.append(current_point)
+                last_movement_time = current_time
 
-    elif key == ord('z') and not recording:
-        start_recording("ZIGZAG")
+            else:
 
-    elif key == ord('t') and not recording:
-        start_recording("TEST")
+                distance = math.hypot(
+                    current_point[0] - previous_point[0],
+                    current_point[1] - previous_point[1]
+                )
 
-    elif key == 32 and recording:
-        finish_recording()
+                if distance >= MOVEMENT_THRESHOLD:
 
-    elif key == ord('q'):
-        break
+                    gesture_points.append(current_point)
+                    last_movement_time = current_time
+
+            previous_point = current_point
+
+        else:
+            previous_point = None
+
+        # =================================
+        # 10. FINISH GESTURE
+        # =================================
+
+        if (
+            gesture_points
+            and current_time - last_movement_time >= GESTURE_PAUSE
+        ):
+
+            print(
+                "Captured points:",
+                len(gesture_points)
+            )
+
+            recognize_gesture(gesture_points)
+
+            gesture_points.clear()
+            previous_point = None
+
+        # =================================
+        # 11. DISPLAY INFORMATION
+        # =================================
+
+        cv2.putText(
+            frame,
+            f"Points: {len(gesture_points)}",
+            (20, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 255, 0),
+            2
+        )
+
+        cv2.imshow(
+            "Olive / Table - DollarPy",
+            frame
+        )
+
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
 
 
-cap.release()
-hands.close()
-cv2.destroyAllWindows()
+# =====================================
+# 12. CLEANUP
+# =====================================
 
-print("Program stopped successfully!")
+finally:
+
+    camera.release()
+    hands.close()
+    cv2.destroyAllWindows()
+    client.close()
+
+    print("Camera and Socket closed.")

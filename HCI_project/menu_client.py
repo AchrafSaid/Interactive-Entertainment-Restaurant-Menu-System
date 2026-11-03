@@ -1,24 +1,54 @@
+
 import socket
 
 HOST = "127.0.0.1"
 PORT = 5000
 
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect((HOST, PORT))
+def send_gesture(gesture):
 
-print("Connected to Restaurant Menu Server!")
+    try:
 
-gestures = [
-    "ZIGZAG",
-    "ZIGZAG"
-]
+        with socket.create_connection(
+            (HOST, PORT),
+            timeout=5
+        ) as client:
 
-for gesture in gestures:
-    client.sendall((gesture + "\n").encode("utf-8"))
+            client.settimeout(5)
 
-    response = client.recv(1024).decode("utf-8")
-    print("Server Response:", response.strip())
+            print("Connected to Restaurant Menu Server!")
 
-client.close()
+            client.sendall(
+                (gesture + "\n").encode("utf-8")
+            )
 
-print("Client disconnected.")
+            response = client.recv(1024).decode("utf-8")
+
+            print("Server Response:", response.strip())
+
+    except ConnectionRefusedError:
+
+        print("ERROR: Server is not running.")
+
+    except socket.timeout:
+
+        print("ERROR: Server response timed out.")
+
+    except OSError as error:
+
+        print("Socket error:", error)
+
+
+if __name__ == "__main__":
+
+    test_gestures = [
+        "SWIPE_RIGHT",
+        "SWIPE_LEFT",
+        "OPEN_PALM",
+        "CLOSED_FIST"
+    ]
+
+    for gesture in test_gestures:
+
+        print("\nSending:", gesture)
+
+        send_gesture(gesture)

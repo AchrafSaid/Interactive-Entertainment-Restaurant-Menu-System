@@ -1,0 +1,364 @@
+
+from pathlib import Path
+
+html = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Olive / Table</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f5f2ea;--card:#fffdf9;--ink:#173d33;--mut:#6b6f6a;--soft:#e1eae1;--line:#e4dfd3;--warn:#f1ddd5;--redt:#a4452c}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 Inter,sans-serif;min-height:100vh}
+h1,h2,h3{font-family:Lora,Georgia,serif;font-weight:400}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.6}
+.btn{border-radius:10px;padding:12px 18px;border:1px solid var(--ink);background:none;font-weight:500}
+.btn.p{background:var(--ink);color:white}
+.btn:focus-visible,.cat:focus-visible,.tab:focus-visible{outline:3px solid #d4a017;outline-offset:2px}
+.small{font-size:11px;color:var(--mut)}
+.pill{background:var(--soft);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:500;display:inline-flex;gap:6px;align-items:center}
+nav{display:flex;align-items:center;justify-content:space-between;background:var(--card);border-radius:0 0 14px 14px;padding:12px 24px;gap:8px;flex-wrap:wrap}
+.logo{letter-spacing:.22em;font-weight:600;font-size:13px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{border:0;background:none;padding:8px 14px;border-radius:10px;font-weight:500;color:var(--mut)}
+.tab.on{background:var(--soft);color:var(--ink)}
+.bar{display:flex;justify-content:space-between;align-items:center;padding:10px 24px;border-bottom:1px solid var(--line);font-size:11px;gap:8px;flex-wrap:wrap}
+.bar span:nth-child(2){color:var(--mut)}
+.pad{padding:28px 24px;max-width:1200px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+.welcome{display:grid;grid-template-columns:1fr 1fr;min-height:100vh}
+.hero{position:relative;background:linear-gradient(160deg,#c98a4b,#7d6b3b 45%,#3f5a3a);display:flex;align-items:flex-end;padding:32px;min-height:500px}
+.hero .logo{position:absolute;top:28px;left:28px;color:white}
+.hero .emo{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:100px;gap:12px;padding-bottom:80px}
+.quote{background:#1d4a3c;color:white;border-radius:14px;padding:18px 22px;position:relative;width:100%}
+.quote h2{font-size:26px;line-height:1.2}.quote p{font-size:12px;margin-top:8px}
+.side{padding:40px 8%;display:flex;flex-direction:column;justify-content:center;gap:14px}
+.side h1{font-size:46px;line-height:1.1;margin:30px 0 6px}
+.side .top{display:flex;justify-content:space-between;align-items:center}
+.stack{display:flex;flex-direction:column;gap:12px}
+.gate{display:grid;grid-template-columns:1fr 1.9fr;gap:20px;margin-top:20px}
+.illus{background:var(--soft);border-radius:14px;min-height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-size:54px}
+.browse{display:flex;gap:14px;margin-top:20px}
+.cats{display:flex;flex-direction:column;gap:12px;min-width:120px}
+.cat{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:9px 16px;font-size:12px;font-weight:500}
+.cat.on{background:var(--ink);color:white;border-color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;flex:1}
+.dish{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 10px 16px;display:flex;flex-direction:column;gap:8px}
+.img{height:92px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:52px;cursor:pointer}
+.dish h3{font-size:19px}
+.row{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.dish .row{margin-top:auto}.price{font-weight:600}
+.dock{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:18px;flex-wrap:wrap}
+.point{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.point i{width:54px;height:54px;border-radius:50%;background:var(--soft);display:flex;align-items:center;justify-content:center;font-style:normal;font-size:18px}
+.review{background:var(--ink);color:white;border-radius:14px;padding:14px 26px;border:0;min-width:210px;text-align:left}
+.review b{display:block}
+.scrim{position:fixed;inset:0;background:rgba(40,60,52,.72);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20;overflow:auto}
+.modal{background:var(--card);border-radius:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:16px;max-width:820px;width:100%;position:relative}
+.modal .pic{border-radius:14px;min-height:260px;display:flex;align-items:center;justify-content:center;font-size:110px}
+.x{position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:50%;border:0;background:var(--soft);font-size:18px}
+.qty{display:flex;align-items:center;background:var(--soft);border-radius:10px}
+.qty button{border:0;background:none;width:34px;height:34px;font-size:18px}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:white;padding:10px 18px;border-radius:10px;z-index:30}
+.two{display:grid;grid-template-columns:1.6fr 1fr;gap:20px;margin-top:18px}
+.line{display:flex;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+.line .th{width:52px;height:52px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:28px}
+.line h3{flex:1;font-size:19px}
+.spin{width:14px;height:14px;border:2px solid var(--ink);border-top-color:transparent;border-radius:50%;display:inline-block;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.qr{width:150px;height:150px;border:2px dashed var(--line);border-radius:12px;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:40px}
+.steps li{list-style:none;display:flex;gap:10px;margin:12px 0}.steps li span{background:var(--soft);border-radius:8px;padding:2px 8px;font-size:11px}
+
+/* Always-visible gesture guide on the right */
+.gesture-sidebar{position:fixed;top:85px;right:12px;bottom:15px;width:215px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;z-index:15;overflow-y:auto;box-shadow:0 5px 20px rgba(23,61,51,.06)}
+.gesture-sidebar h2{font-size:21px;margin-bottom:4px}
+.gesture-sidebar .subtitle{font-size:10px;color:var(--mut);margin-bottom:12px}
+.gesture-item{display:flex;align-items:center;gap:10px;padding:9px 5px;border-bottom:1px solid var(--line)}
+.gesture-item:last-child{border-bottom:0}
+.gesture-item .hand{width:42px;height:42px;flex-shrink:0;background:var(--soft);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:25px}
+.gesture-item strong{display:block;font-size:10px;line-height:1.35}
+.gesture-item span{display:block;font-size:9px;color:var(--mut);line-height:1.35;margin-top:2px}
+@media(min-width:1000px){#app{margin-right:235px}}
+@media(max-width:999px){.gesture-sidebar{position:static;width:auto;margin:15px;max-height:350px}.gesture-sidebar .gesture-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 10px}}
+@media(max-width:760px){.welcome,.gate,.modal,.two{grid-template-columns:1fr}.hero{min-height:360px}.grid{grid-template-columns:repeat(2,1fr)}.browse{flex-direction:column}.cats{flex-direction:row;flex-wrap:wrap}.side h1{font-size:36px}}
+@media(max-width:560px){.gesture-sidebar .gesture-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:430px){.grid{grid-template-columns:1fr}.pad{padding:22px 14px}nav{padding:12px 14px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+
+
+const ITEMS = [
+
+/* ================= SMALL PLATES ================= */
+
+{id:"fattoush",n:"Garden Fattoush",d:"Fresh vegetables, crispy pita and sumac dressing.",l:"A refreshing Levantine salad with crunchy toasted pita and a tangy sumac dressing.",ing:"Lettuce, cucumber, tomato, radish, pita bread, sumac, olive oil.",p:150,e:"🥗",bg:"linear-gradient(160deg,#9bb877,#4d7a45)",category:"Small plates"},
+{id:"greek_salad",n:"Greek Salad",d:"Fresh vegetables, feta cheese and olives.",l:"A Mediterranean salad with creamy feta, fresh vegetables and black olives.",ing:"Tomato, cucumber, lettuce, feta, olives, oregano.",p:185,e:"🥗",bg:"linear-gradient(160deg,#b6c987,#60834c)",category:"Small plates"},
+{id:"caesar",n:"Chicken Caesar Salad",d:"Grilled chicken, parmesan and Caesar dressing.",l:"Crisp lettuce topped with grilled chicken, parmesan and creamy Caesar dressing.",ing:"Chicken, lettuce, parmesan, croutons, Caesar dressing.",p:220,e:"🥬",bg:"linear-gradient(160deg,#d6c78d,#8b9b58)",category:"Small plates"},
+{id:"soup",n:"Creamy Mushroom Soup",d:"Warm and creamy mushroom soup.",l:"A rich mushroom soup finished with fresh cream and herbs.",ing:"Mushrooms, cream, milk, onion, herbs.",p:125,e:"🍲",bg:"linear-gradient(160deg,#d5bd9b,#8d735b)",category:"Small plates"},
+{id:"garlic_bread",n:"Garlic Bread",d:"Toasted bread with garlic butter.",l:"Freshly toasted bread topped with garlic butter and herbs.",ing:"Bread, garlic, butter, parsley.",p:95,e:"🥖",bg:"linear-gradient(160deg,#e6c38a,#a8753e)",category:"Small plates"},
+
+/* ================= MAIN COURSES ================= */
+
+{id:"grilled_chicken",n:"Grilled Chicken Plate",d:"Juicy grilled chicken with rice and vegetables.",l:"Tender marinated chicken breast served with seasoned rice and grilled vegetables.",ing:"Chicken breast, rice, vegetables, spices, herbs.",p:320,e:"🍗",bg:"linear-gradient(160deg,#d7a66d,#85502f)",category:"Main courses"},
+{id:"chicken_crispy",n:"Crispy Chicken",d:"Golden crispy chicken served with fries.",l:"Crunchy fried chicken strips served with golden fries and our signature sauce.",ing:"Chicken, crispy coating, potatoes, house sauce.",p:290,e:"🍗",bg:"linear-gradient(160deg,#e4ad5e,#a45d2d)",category:"Main courses"},
+{id:"chicken_alfredo",n:"Chicken Alfredo",d:"Creamy pasta with chicken and parmesan.",l:"Fettuccine pasta tossed in a creamy Alfredo sauce with grilled chicken.",ing:"Pasta, chicken, cream, parmesan, garlic.",p:310,e:"🍝",bg:"linear-gradient(160deg,#e9d1a0,#aa8754)",category:"Main courses"},
+{id:"beef_steak",n:"Classic Beef Steak",d:"Grilled beef steak with roasted potatoes.",l:"A tender grilled beef steak served with roasted potatoes and seasonal vegetables.",ing:"Beef steak, potatoes, vegetables, butter, herbs.",p:490,e:"🥩",bg:"linear-gradient(160deg,#c58b68,#713d32)",category:"Main courses"},
+{id:"chicken_fajita",n:"Chicken Fajita",d:"Sizzling chicken with peppers and onions.",l:"Seasoned chicken strips cooked with colorful peppers and onions.",ing:"Chicken, bell peppers, onion, spices, rice.",p:285,e:"🍛",bg:"linear-gradient(160deg,#d99b57,#934b2b)",category:"Main courses"},
+{id:"beef_kebab",n:"Beef Kebab",d:"Grilled beef skewers with rice.",l:"Juicy grilled beef skewers served with rice, salad and tahini.",ing:"Beef, rice, onion, spices, tahini.",p:390,e:"🍢",bg:"linear-gradient(160deg,#bd855b,#75452e)",category:"Main courses"},
+
+/* ================= BURGERS & SANDWICHES ================= */
+
+{id:"burger",n:"House Beef Burger",d:"Grilled beef, cheese and house sauce.",l:"Flame-grilled beef, melted cheese, crisp greens and our signature sauce in a toasted brioche bun.",ing:"Beef, brioche, cheese, lettuce, tomato, pickles, sauce.",p:280,e:"🍔",bg:"linear-gradient(160deg,#d9a35c,#8a5b2d)",category:"Burgers & Sandwiches"},
+{id:"double_burger",n:"Double Smash Burger",d:"Two beef patties with double cheese.",l:"Two smashed beef patties with melted cheddar, caramelized onions and burger sauce.",ing:"Double beef, cheddar, brioche, onion, pickles, sauce.",p:365,e:"🍔",bg:"linear-gradient(160deg,#d99b56,#743d27)",category:"Burgers & Sandwiches"},
+{id:"chicken_burger",n:"Crispy Chicken Burger",d:"Crunchy chicken with creamy sauce.",l:"Crispy chicken fillet with lettuce, pickles and creamy mayo.",ing:"Chicken, brioche, lettuce, pickles, mayonnaise.",p:255,e:"🍔",bg:"linear-gradient(160deg,#e5b66d,#9c6338)",category:"Burgers & Sandwiches"},
+{id:"club_sandwich",n:"Club Sandwich",d:"Triple-layer sandwich with fries.",l:"A classic toasted triple-layer sandwich filled with chicken, cheese, lettuce and tomato.",ing:"Toast, chicken, cheese, lettuce, tomato, mayonnaise.",p:240,e:"🥪",bg:"linear-gradient(160deg,#d8bd8c,#92734a)",category:"Burgers & Sandwiches"},
+{id:"philly",n:"Philly Cheesesteak",d:"Beef strips, melted cheese and peppers.",l:"Tender beef strips with sautéed onions, peppers and melted cheese in a toasted roll.",ing:"Beef, cheese, onion, peppers, sandwich bread.",p:295,e:"🥖",bg:"linear-gradient(160deg,#c99a69,#81502f)",category:"Burgers & Sandwiches"},
+
+/* ================= PIZZA & PASTA ================= */
+
+{id:"margherita",n:"Margherita Pizza",d:"Tomato sauce, mozzarella and fresh basil.",l:"A classic thin-crust pizza topped with tomato sauce, mozzarella and fresh basil.",ing:"Pizza dough, tomato sauce, mozzarella, basil.",p:250,e:"🍕",bg:"linear-gradient(160deg,#e9bd78,#a65d36)",category:"Pizza & Pasta"},
+{id:"pepperoni",n:"Pepperoni Pizza",d:"Mozzarella and pepperoni slices.",l:"A freshly baked pizza loaded with mozzarella and savory pepperoni.",ing:"Pizza dough, tomato sauce, mozzarella, pepperoni.",p:320,e:"🍕",bg:"linear-gradient(160deg,#d99a64,#963e2e)",category:"Pizza & Pasta"},
+{id:"chicken_pizza",n:"Chicken Ranch Pizza",d:"Chicken, cheese and creamy ranch.",l:"A cheesy pizza topped with grilled chicken, mushrooms and ranch sauce.",ing:"Pizza dough, chicken, mozzarella, mushrooms, ranch.",p:340,e:"🍕",bg:"linear-gradient(160deg,#d9bd89,#8c704a)",category:"Pizza & Pasta"},
+{id:"penne",n:"Penne Arrabbiata",d:"Penne pasta in spicy tomato sauce.",l:"Penne pasta tossed in a rich spicy tomato sauce with garlic and herbs.",ing:"Penne, tomato, garlic, chili, basil.",p:225,e:"🍝",bg:"linear-gradient(160deg,#d98255,#963d2b)",category:"Pizza & Pasta"},
+{id:"lasagna",n:"Beef Lasagna",d:"Layers of pasta, beef and melted cheese.",l:"Oven-baked pasta layers with seasoned beef, tomato sauce and creamy béchamel.",ing:"Pasta sheets, beef, tomato, béchamel, mozzarella.",p:330,e:"🍝",bg:"linear-gradient(160deg,#d9a46e,#995638)",category:"Pizza & Pasta"},
+
+/* ================= SNACKS ================= */
+
+{id:"fries",n:"Classic French Fries",d:"Golden and crispy potato fries.",l:"Freshly fried golden potato sticks seasoned with our house spice mix.",ing:"Potatoes, salt, seasoning.",p:85,e:"🍟",bg:"linear-gradient(160deg,#e9c36e,#bd842e)",category:"Snacks"},
+{id:"loaded_fries",n:"Loaded Cheese Fries",d:"Fries covered with melted cheese.",l:"Crispy fries topped with melted cheese sauce and herbs.",ing:"Potatoes, cheddar sauce, herbs.",p:145,e:"🍟",bg:"linear-gradient(160deg,#e9c878,#ba8736)",category:"Snacks"},
+{id:"wings",n:"Buffalo Chicken Wings",d:"Spicy wings with buffalo sauce.",l:"Crispy chicken wings tossed in a tangy buffalo sauce.",ing:"Chicken wings, buffalo sauce, spices.",p:210,e:"🍗",bg:"linear-gradient(160deg,#d77c4c,#893b2c)",category:"Snacks"},
+{id:"nuggets",n:"Chicken Nuggets",d:"Crispy chicken bites with dip.",l:"Golden chicken nuggets served with your choice of dipping sauce.",ing:"Chicken, crispy coating, seasoning.",p:155,e:"🍗",bg:"linear-gradient(160deg,#e9bd76,#b4773c)",category:"Snacks"},
+{id:"mozzarella",n:"Mozzarella Sticks",d:"Crispy sticks with melted cheese.",l:"Golden breaded mozzarella sticks served with marinara dip.",ing:"Mozzarella, breadcrumbs, marinara sauce.",p:170,e:"🧀",bg:"linear-gradient(160deg,#ebd7a1,#b28c55)",category:"Snacks"},
+
+/* ================= DRINKS ================= */
+
+{id:"juice",n:"Fresh Orange Juice",d:"Freshly squeezed oranges.",l:"Freshly squeezed orange juice served chilled.",ing:"Fresh oranges.",p:90,e:"🍹",bg:"linear-gradient(160deg,#f2b45a,#c9772b)",category:"Drinks"},
+{id:"mango",n:"Fresh Mango Juice",d:"Sweet and refreshing mango juice.",l:"Fresh mango blended until smooth and served chilled.",ing:"Fresh mango, ice.",p:105,e:"🥭",bg:"linear-gradient(160deg,#f5c45b,#d58a24)",category:"Drinks"},
+{id:"strawberry",n:"Strawberry Juice",d:"Fresh strawberry drink.",l:"A refreshing blend of fresh strawberries served cold.",ing:"Strawberries, ice.",p:100,e:"🍓",bg:"linear-gradient(160deg,#e99a9c,#ba4c5d)",category:"Drinks"},
+{id:"lemon_mint",n:"Lemon Mint",d:"Fresh lemon with mint and ice.",l:"A chilled mix of fresh lemon juice, mint leaves and ice.",ing:"Lemon, mint, sugar, ice.",p:85,e:"🍋",bg:"linear-gradient(160deg,#c6d78c,#6b9c55)",category:"Drinks"},
+{id:"iced_latte",n:"Iced Latte",d:"Espresso with cold milk and ice.",l:"A smooth espresso blended with cold milk and served over ice.",ing:"Espresso, milk, ice.",p:125,e:"🥤",bg:"linear-gradient(160deg,#d8b58c,#98704d)",category:"Drinks"},
+{id:"mocha",n:"Iced Mocha",d:"Coffee, chocolate and cold milk.",l:"A chilled espresso drink blended with chocolate and milk.",ing:"Espresso, chocolate, milk, ice.",p:145,e:"☕",bg:"linear-gradient(160deg,#b68b71,#644537)",category:"Drinks"},
+{id:"milkshake",n:"Chocolate Milkshake",d:"Thick chocolate milkshake.",l:"A creamy chocolate milkshake topped with whipped cream.",ing:"Milk, chocolate, ice cream, whipped cream.",p:155,e:"🥤",bg:"linear-gradient(160deg,#b78b76,#654333)",category:"Drinks"},
+
+/* ================= DESSERTS ================= */
+
+{id:"brownie",n:"Chocolate Brownie",d:"Rich chocolate brownie with a soft center.",l:"A warm chocolate brownie with a fudgy center.",ing:"Chocolate, cocoa, butter, flour, eggs.",p:130,e:"🍫",bg:"linear-gradient(160deg,#ad7962,#57372f)",category:"Desserts"},
+{id:"cheesecake",n:"Classic Cheesecake",d:"Creamy cheesecake with biscuit base.",l:"A smooth baked cheesecake served with a buttery biscuit crust.",ing:"Cream cheese, biscuit, butter, sugar.",p:165,e:"🍰",bg:"linear-gradient(160deg,#e9d2a5,#b58b5b)",category:"Desserts"},
+{id:"molten",n:"Molten Chocolate Cake",d:"Warm cake with a flowing chocolate center.",l:"A warm chocolate cake with a rich melted chocolate center.",ing:"Chocolate, butter, flour, eggs, sugar.",p:180,e:"🍮",bg:"linear-gradient(160deg,#b67d62,#60372e)",category:"Desserts"},
+{id:"tiramisu",n:"Classic Tiramisu",d:"Coffee-soaked layers and mascarpone cream.",l:"Traditional Italian dessert with coffee-soaked sponge and mascarpone cream.",ing:"Coffee, mascarpone, sponge, cocoa.",p:175,e:"🍰",bg:"linear-gradient(160deg,#c9a17d,#80614d)",category:"Desserts"},
+{id:"waffles",n:"Chocolate Waffles",d:"Warm waffles with chocolate sauce.",l:"Freshly prepared waffles topped with chocolate sauce and fruit.",ing:"Waffle batter, chocolate, strawberries.",p:190,e:"🧇",bg:"linear-gradient(160deg,#e4bb7e,#a87540)",category:"Desserts"},
+{id:"icecream",n:"Ice Cream Sundae",d:"Three scoops with chocolate topping.",l:"Three scoops of creamy ice cream served with chocolate sauce.",ing:"Vanilla ice cream, chocolate sauce, toppings.",p:145,e:"🍨",bg:"linear-gradient(160deg,#e9d3b4,#bd987b)",category:"Desserts"},
+
+/* ================= BREAKFAST ================= */
+
+{id:"pancakes",n:"Classic Pancakes",d:"Fluffy pancakes with maple syrup.",l:"A stack of fluffy pancakes served with maple syrup and fresh fruit.",ing:"Flour, milk, eggs, maple syrup, fruit.",p:180,e:"🥞",bg:"linear-gradient(160deg,#e9c48b,#b17a42)",category:"Breakfast"},
+{id:"omelette",n:"Cheese Omelette",d:"Three-egg omelette with cheese.",l:"A fluffy omelette filled with melted cheese and fresh herbs.",ing:"Eggs, cheese, herbs, butter.",p:145,e:"🍳",bg:"linear-gradient(160deg,#f0d58b,#c69b43)",category:"Breakfast"},
+{id:"french_toast",n:"French Toast",d:"Golden toast with honey and fruit.",l:"Thick slices of golden French toast served with honey and fresh fruit.",ing:"Bread, eggs, milk, honey, fruit.",p:165,e:"🍞",bg:"linear-gradient(160deg,#dfb67a,#a87543)",category:"Breakfast"},
+{id:"croissant",n:"Butter Croissant",d:"Freshly baked buttery croissant.",l:"A flaky, golden butter croissant baked fresh.",ing:"Flour, butter, milk, yeast.",p:95,e:"🥐",bg:"linear-gradient(160deg,#e7c58d,#b17c43)",category:"Breakfast"},
+{id:"avocado_toast",n:"Avocado Toast",d:"Avocado, eggs and toasted bread.",l:"Smashed avocado on toasted sourdough topped with eggs and seasoning.",ing:"Avocado, sourdough, eggs, lemon, seasoning.",p:195,e:"🥑",bg:"linear-gradient(160deg,#a8bd83,#54764a)",category:"Breakfast"},
+
+/* ================= COMBOS & OFFERS ================= */
+
+{id:"burger_combo",n:"Classic Burger Combo",d:"Beef burger, fries and a soft drink.",l:"Our classic beef burger served with crispy fries and your choice of soft drink.",ing:"Beef burger, fries, soft drink.",p:355,e:"🍔",bg:"linear-gradient(160deg,#d7a35e,#87502c)",category:"Combos & Offers"},
+{id:"chicken_combo",n:"Crispy Chicken Combo",d:"Crispy chicken, fries and a drink.",l:"A crispy chicken meal with golden fries and a refreshing drink.",ing:"Crispy chicken, fries, soft drink.",p:345,e:"🍗",bg:"linear-gradient(160deg,#e4b16d,#99552f)",category:"Combos & Offers"},
+{id:"family_box",n:"Family Sharing Box",d:"A generous meal for sharing.",l:"A sharing box with crispy chicken, wings, fries and assorted dips.",ing:"Chicken, wings, fries, dips.",p:690,e:"🍱",bg:"linear-gradient(160deg,#d7a36a,#84502e)",category:"Combos & Offers"},
+{id:"pizza_combo",n:"Pizza Duo",d:"Two medium pizzas with two drinks.",l:"Choose two medium pizzas and enjoy them with two soft drinks.",ing:"Two medium pizzas, two soft drinks.",p:590,e:"🍕",bg:"linear-gradient(160deg,#dfad72,#9c5634)",category:"Combos & Offers"},
+{id:"dessert_combo",n:"Sweet Treat Combo",d:"Two desserts and two hot drinks.",l:"Choose two desserts and pair them with two hot drinks.",ing:"Two desserts, two hot drinks.",p:320,e:"🍰",bg:"linear-gradient(160deg,#e4c39d,#a67b60)",category:"Combos & Offers"}
+
+];
+
+const CATS = [
+"Small plates",
+"Main courses",
+"Burgers & Sandwiches",
+"Pizza & Pasta",
+"Snacks",
+"Drinks",
+"Desserts",
+"Breakfast",
+"Combos & Offers"
+];
+
+const GESTURES=[
+{name:"OPEN PALM",icon:"🖐️",action:"Open Menu",description:"Show your open hand to open the menu."},
+{name:"CLOSED FIST",icon:"✊",action:"Close / Go Back",description:"Close your hand into a fist to go back."},
+{name:"SWIPE RIGHT",icon:"👉",action:"Next Category",description:"Move your hand towards the right."},
+{name:"SWIPE LEFT",icon:"👈",action:"Previous Category",description:"Move your hand towards the left."},
+{name:"SWIPE UP",icon:"👆",action:"Previous Category",description:"Move your hand upwards."},
+{name:"SWIPE DOWN",icon:"👇",action:"Next Category",description:"Move your hand downwards."},
+{name:"SELECT PRODUCT",icon:"☝️",action:"Select Product",description:"Raise one finger to select a product."},
+{name:"THUMBS UP",icon:"👍",action:"Add to Cart",description:"Give a thumbs up to add the selected item."},
+{name:"THUMBS DOWN",icon:"👎",action:"Decline Product",description:"Give a thumbs down to decline a product."},
+{name:"C SHAPE",icon:"🤏",action:"Open Cart",description:"Make a C-shaped gesture with your hand."},
+{name:"OK SIGN",icon:"👌",action:"Checkout",description:"Make an OK sign to confirm checkout."}
+];
+
+let S={scr:"welcome",cat:"Main courses",cart:{},modal:null,mq:1,toast:"",sent:false,toastTimer:null};
+const $=id=>ITEMS.find(item=>item.id===id);
+const cartCount=()=>Object.values(S.cart).reduce((a,b)=>a+b,0);
+const tot=()=>Object.entries(S.cart).reduce((sum,[id,qty])=>sum+($(id)?$(id).p*qty:0),0);
+const money=n=>`${n} EGP`;
+
+function go(screen){S.scr=screen;S.modal=null;render()}
+function tip(message){S.toast=message;render();clearTimeout(S.toastTimer);S.toastTimer=setTimeout(()=>{S.toast="";render()},2200)}
+function add(id,quantity=1){const item=$(id);if(!item)return;S.cart[id]=(S.cart[id]||0)+quantity;tip(`${item.n} added to your order`)}
+function removeOne(id){if(!S.cart[id])return;if(S.cart[id]>1)S.cart[id]--;else delete S.cart[id];render()}
+function setCategory(category){if(!CATS.includes(category))return;S.cat=category;S.modal=null;render()}
+
+function welcome(){return `
+<section class="welcome">
+<div class="hero"><div class="logo">OLIVE / TABLE</div><div class="emo">🍽️ 🌿</div>
+<div class="quote"><h2>A table worth gathering around.</h2><p>Good food. Good company. A little joy in every bite.</p></div></div>
+<div class="side"><div class="top"><span class="pill">A NEW WAY TO DINE</span><span class="small">01 / 04</span></div>
+<h1>Welcome to<br>Olive / Table.</h1>
+<p>Explore our menu, discover your favourites, and enjoy an interactive dining experience.</p>
+<div class="stack"><button class="btn p" onclick="go('gate')">Start your experience →</button></div>
+<p class="small">Gesture controls are available when the camera integration is connected.</p></div>
+</section>`}
+
+function gatePage(){return `
+<nav><div class="logo">OLIVE / TABLE</div><span class="pill">WELCOME</span></nav>
+<div class="pad"><span class="small">STEP 01 / INTERACTION</span>
+<h1 style="font-size:38px;margin:12px 0">Make yourself comfortable.</h1>
+<p class="small">Choose how you want to explore the menu.</p>
+<div class="gate"><div class="illus"><span>✋</span><strong style="font-size:15px">Gesture control</strong><span class="small">Camera integration pending</span></div>
+<div class="card stack"><h2 style="font-size:26px">Ready to explore?</h2>
+<p>You can browse the menu using the buttons. Gesture controls will work after connecting the Python camera application.</p>
+<button class="btn p" onclick="browse()">Explore the menu →</button><button class="btn" onclick="go('welcome')">Back</button></div></div></div>`}
+
+function navbar(){return `
+<nav><div class="logo">OLIVE / TABLE</div><div class="tabs">
+<button class="tab ${S.scr==="browse"?"on":""}" onclick="browse()">Menu</button>
+<button class="tab ${S.scr==="games"?"on":""}" onclick="go('games')">Games</button>
+<button class="tab ${S.scr==="rewards"?"on":""}" onclick="go('rewards')">Rewards</button>
+</div><button class="btn" onclick="review()">Order (${cartCount()})</button></nav>`}
+
+function browse(){S.scr="browse";S.modal=null;render()}
+function browsePage(){
+const list=ITEMS.filter(item=>item.category===S.cat);
+return `${navbar()}<div class="bar"><span>THE MENU</span><span>Freshly prepared for you</span><span>${cartCount()} ITEMS IN ORDER</span></div>
+<main class="pad"><span class="small">DISCOVER OUR MENU</span><h1 style="font-size:36px;margin:8px 0">Something delicious.</h1>
+<p class="small">Choose a category and explore our selection.</p><div class="browse"><div class="cats">
+${CATS.map(c=>`<button class="cat ${S.cat===c?"on":""}" onclick="setCategory('${c}')">${c}</button>`).join("")}</div>
+<div style="flex:1;min-width:0"><div class="grid">${list.length?list.map(item=>`
+<article class="dish"><div class="img" style="background:${item.bg}" onclick="openItem('${item.id}')">${item.e}</div>
+<h3>${item.n}</h3><p class="small">${item.d}</p><div class="row"><span class="price">${money(item.p)}</span><button class="btn p" onclick="openItem('${item.id}')">View</button></div></article>`).join(""):`
+<div class="card" style="grid-column:1/-1"><h3>No items available yet.</h3><p class="small">New dishes will be added soon.</p></div>`}</div></div></div>
+<div class="dock"><div class="point"><i>🛍️</i><div><strong>${cartCount()} items</strong><p class="small">Your current selection</p></div></div>
+<button class="review" onclick="review()"><b>Review your order →</b><span class="small" style="color:#e1eae1">${money(tot())}</span></button></div></main>${S.modal?modal():""}`}
+
+function openItem(id){if(!$(id))return;S.modal=id;S.mq=1;render()}
+function modal(){const item=$(S.modal);if(!item)return "";return `
+<div class="scrim" onclick="closeModal(event)"><section class="modal" onclick="event.stopPropagation()">
+<button class="x" onclick="closeModal()">×</button><div class="pic" style="background:${item.bg}">${item.e}</div>
+<div class="stack" style="padding:18px 8px"><span class="pill">${item.category}</span><h2 style="font-size:30px">${item.n}</h2><p>${item.l}</p>
+<div><strong>Ingredients</strong><p class="small">${item.ing}</p></div><h3>${money(item.p)}</h3>
+<div class="qty"><button onclick="changeModalQty(-1)">−</button><strong style="padding:0 10px">${S.mq}</strong><button onclick="changeModalQty(1)">+</button></div>
+<button class="btn p" onclick="addFromModal()">Add to order · ${money(item.p*S.mq)}</button><button class="btn" onclick="closeModal()">Continue browsing</button></div></section></div>`}
+function changeModalQty(amount){S.mq=Math.max(1,Math.min(20,S.mq+amount));render()}
+function addFromModal(){if(!S.modal)return;add(S.modal,S.mq);S.modal=null;S.mq=1}
+function closeModal(event){if(event&&event.target!==event.currentTarget)return;S.modal=null;render()}
+
+function review(){S.scr="review";S.modal=null;render()}
+function reviewPage(){const entries=Object.entries(S.cart);return `${navbar()}<main class="pad"><span class="small">YOUR SELECTION</span>
+<h1 style="font-size:38px;margin:10px 0">Review your order.</h1><div class="two"><section class="card"><h2 style="font-size:25px">Your items</h2>
+${entries.length?entries.map(([id,qty])=>{const item=$(id);if(!item)return "";return `
+<div class="line"><div class="th" style="background:${item.bg}">${item.e}</div><h3>${item.n}<div class="small">${money(item.p)} each</div></h3>
+<div class="qty"><button onclick="removeOne('${id}')">−</button><strong>${qty}</strong><button onclick="add('${id}')">+</button></div><strong>${money(item.p*qty)}</strong></div>`}).join(""):`
+<p class="small" style="padding:24px 0">Your order is empty. Explore the menu to add something delicious.</p>`}
+<button class="btn" style="margin-top:18px" onclick="browse()">← Back to menu</button></section>
+<aside class="card stack"><h2 style="font-size:25px">Order summary</h2><div class="row"><span class="small">Items</span><strong>${cartCount()}</strong></div>
+<div class="row"><span class="small">Subtotal</span><strong>${money(tot())}</strong></div><div class="row"><span class="small">Service</span><strong>Not calculated</strong></div>
+<div class="row"><strong>Total</strong><strong>${money(tot())}</strong></div>
+<button class="btn p" onclick="place()" ${entries.length?"":"disabled"}>Continue →</button>
+<p class="small">Demo interface: order submission is not connected to a restaurant backend yet.</p></aside></div></main>`}
+
+function place(){if(!cartCount()){tip("Your order is empty");return}S.sent=false;go("sending");setTimeout(()=>{S.sent=true;if(S.scr==="sending")render()},1800)}
+function sendingPage(){return `${navbar()}<main class="pad" style="max-width:650px"><div class="card stack" style="text-align:center;padding:40px">
+<div style="font-size:55px">${S.sent?"✓":'<span class="spin"></span>'}</div><h1 style="font-size:32px">${S.sent?"Demo complete":"Preparing your experience"}</h1>
+<p>${S.sent?"Your order flow demonstration is complete. No real order was sent.":"Please wait while the demo order screen is displayed."}</p>
+<button class="btn p" onclick="browse()">Back to menu</button><button class="btn" onclick="review()">View order</button></div></main>`}
+function gamesPage(){return `${navbar()}<main class="pad"><span class="small">INTERACTIVE EXPERIENCE</span><h1 style="font-size:38px;margin:10px 0">Take a little break.</h1>
+<div class="two"><section class="card stack"><span style="font-size:55px">🎮</span><h2 style="font-size:27px">Table games</h2>
+<p>Enjoy a small interactive experience while waiting for your meal.</p><span class="pill">DEMO FEATURE</span></section>
+<section class="card stack"><div class="qr">QR</div><h2 style="font-size:23px">Scan & play</h2><p class="small">QR functionality is not connected yet.</p></section></div></main>`}
+function rewardsPage(){return `${navbar()}<main class="pad"><span class="small">OLIVE REWARDS</span><h1 style="font-size:38px;margin:10px 0">Little moments, extra rewards.</h1>
+<div class="card stack" style="max-width:600px"><div style="font-size:50px">🌿</div><h2 style="font-size:27px">Welcome to Olive Rewards</h2>
+<p>Your rewards experience will appear here.</p><span class="pill">DEMO FEATURE</span><button class="btn p" onclick="browse()">Explore the menu</button></div></main>`}
+
+function gestureSidebar(){return `<aside class="gesture-sidebar"><h2>Gesture Guide</h2><p class="subtitle">CONTROL YOUR MENU WITH YOUR HANDS</p><div class="gesture-list">
+${GESTURES.map(g=>`<div class="gesture-item"><div class="hand">${g.icon}</div><div><strong>${g.name}</strong><span>${g.action}</span></div></div>`).join("")}
+</div></aside>`}
+
+function render(){
+const app=document.getElementById("app");if(!app)return;
+let page="";
+switch(S.scr){
+case "welcome":page=welcome();break;
+case "gate":page=gatePage();break;
+case "browse":page=browsePage();break;
+case "review":page=reviewPage();break;
+case "sending":page=sendingPage();break;
+case "games":page=gamesPage();break;
+case "rewards":page=rewardsPage();break;
+default:S.scr="welcome";page=welcome();
+}
+app.innerHTML=page+gestureSidebar();
+if(S.toast){const toast=document.createElement("div");toast.className="toast";toast.textContent=S.toast;app.appendChild(toast)}
+}
+
+/* Python / Socket.IO can call window.handleGesture("GESTURE_NAME") */
+window.handleGesture=function(gesture){
+if(!gesture||typeof gesture!=="string")return;
+const g=gesture.trim().toUpperCase();
+if(g==="OPEN_PALM"){if(S.scr==="welcome")go("gate");else if(S.scr==="gate")browse();else if(S.scr==="browse"){if(S.modal){S.modal=null;render()}else review()}return}
+if(g==="CLOSED_FIST"){if(S.modal){S.modal=null;render()}else if(S.scr!=="welcome")go("browse");return}
+if(S.scr==="browse"){
+if(g==="SWIPE_RIGHT"){const i=CATS.indexOf(S.cat);setCategory(CATS[(i+1)%CATS.length]);return}
+if(g==="SWIPE_RIGHT"){
+const i=CATS.indexOf(S.cat);
+setCategory(CATS[(i+1)%CATS.length]);
+return;
+}
+
+if(g==="SWIPE_LEFT"){
+const i=CATS.indexOf(S.cat);
+setCategory(CATS[(i-1+CATS.length)%CATS.length]);
+return;
+}
+
+if(g==="SWIPE_DOWN"){
+const i=CATS.indexOf(S.cat);
+setCategory(CATS[(i+1)%CATS.length]);
+return;
+}
+
+if(g==="SWIPE_UP"){
+const i=CATS.indexOf(S.cat);
+setCategory(CATS[(i-1+CATS.length)%CATS.length]);
+return;
+}
+if(g==="SELECT_PRODUCT"||g==="V_SHAPE"){const item=ITEMS.find(x=>x.category===S.cat);if(item)openItem(item.id);return}
+if(g==="THUMBS_UP"){if(S.modal)add(S.modal);else{const item=ITEMS.find(x=>x.category===S.cat);if(item)add(item.id)}return}
+if(g==="THUMBS_DOWN"){if(S.modal){S.modal=null;render()}else tip("Product declined");return}
+if(g==="C_SHAPE"){review();return}
+if(g==="OK_SIGN"){if(cartCount())place();else tip("Your order is empty");return}
+if(g==="ZIGZAG"){go("games");return}
+}
+if(S.scr==="review"&&g==="OK_SIGN"){if(cartCount())place();return}
+};
+render();
+</script>
+</body>
+</html>
+'''
+path = Path("olive_table_with_gesture_sidebar.html")
+path.write_text(html, encoding="utf-8")
+print(f"Created: {path}\nSize: {path.stat().st_size:,} bytes")
