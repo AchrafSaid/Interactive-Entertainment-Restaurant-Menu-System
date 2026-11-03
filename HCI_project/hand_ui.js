@@ -183,7 +183,12 @@ window.HandUI = (() => {
       case "shortcut": shortcut(event.shortcut);return;
       case "select": status(select());return;
       case "swipe":
-        status(event.source === 'scroll' ? `${move(event.direction, true)} · move two fingers to keep going` : move(event.direction));
+        {
+          const moved = event.source === 'scroll' ? move(event.direction, true) : move(event.direction);
+          // Show what the DollarPy recogniser classified, and how confident it was.
+          const dollar = event.gesture ? ` · DollarPy: ${event.gesture} ${Math.round((event.score || 0) * 100)}%` : '';
+          status(moved + dollar);
+        }
         return;
       case "scroll":
         status(`${describe()} · move two fingers up, down, left or right`);return;

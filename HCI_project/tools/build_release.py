@@ -33,6 +33,7 @@ def main():
         "--add-data", f"{ROOT / 'bluetooth_ui.js'}:.", "--add-data", f"{ROOT / 'bluetooth_ui.css'}:.",
         "--add-data", f"{ROOT / 'hand_ui.js'}:.", "--add-data", f"{ROOT / 'hand_ui.css'}:.",
         "--add-data", f"{ROOT / 'assets'}:assets",
+        "--add-data", f"{ROOT / 'swipe_templates.json'}:.", "--hidden-import", "movement_dollarpy",
         str(ROOT / "run_menu.py"),
     ], cwd=ROOT, check=True)
 

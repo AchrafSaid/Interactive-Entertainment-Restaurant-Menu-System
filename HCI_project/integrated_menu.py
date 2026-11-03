@@ -41,6 +41,7 @@ class OliveTableApp:
 
     def camera_loop(self):
         last_preview = last_input = 0
+        dollar_label = None
         was_visible = False
         try:
             while self.running:
@@ -76,12 +77,16 @@ class OliveTableApp:
                         self.hand_sink(event)
                         last_input = now
                     was_visible = True
+                    if event["action"] == "swipe" and event.get("gesture"):
+                        dollar_label = (f"DollarPy: {event['gesture']} {event['score']:.2f}", now + 1.5)
                     self.status = {"select":"One finger: hold to select", "scroll":"Two fingers: scroll",
                                    "back":"Fist: close / go back", "pause":"Swipe to move the highlight",
                                    "menu":"Open palm: open menu", "add":"Thumbs up: add product",
                                    "decline":"Thumbs down: decline product", "cart":"C shape: open cart",
                                    "checkout":"OK sign: confirm checkout", "games":"Rock sign: games",
                                    "rewards":"Three fingers: rewards"}.get(event.get("pose"), "Move your hand closer")
+                    if dollar_label and now < dollar_label[1]:
+                        self.status = dollar_label[0]   # keep the DollarPy result visible briefly
                     mp.solutions.drawing_utils.draw_landmarks(frame, hand, mp.solutions.hands.HAND_CONNECTIONS)
                 elif was_visible:
                     self.hand_sink(self.input.lost())

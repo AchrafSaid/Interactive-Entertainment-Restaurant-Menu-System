@@ -338,7 +338,7 @@ function gestureSidebar(){return `<aside class="gesture-sidebar"><span class="pi
 <div class="camera-card">${BluetoothUI.cameraEnabled()?'<img class="camera-frame" src="http://127.0.0.1:8765/stream" alt="Live hand tracking camera">':'<div class="camera-placeholder">Camera off<br>Touch and mouse are available</div>'}
 <button class="btn camera-toggle" onclick="BluetoothUI.setCamera(${!BluetoothUI.cameraEnabled()})">${BluetoothUI.cameraEnabled()?'Stop camera':'Start hand control'}</button></div>
 <div id="hand-status" class="hand-status" role="status">${BluetoothUI.cameraEnabled()?'Show one hand to the camera':'Choose Start hand control to begin'}</div>
-<div class="hand-steps"><div class="hand-step"><span>👋</span><span><b>Swipe → Move highlight</b><small>Swipe your hand left, right, up or down. The gold outline shows what is highlighted.</small></span></div>
+<div class="hand-steps"><div class="hand-step"><span>👋</span><span><b>Swipe → Move highlight</b><small>Swipe your hand left, right, up or down. DollarPy recognises the movement; the gold outline shows what is highlighted.</small></span></div>
 <div class="hand-step"><span>☝</span><span><b>One finger → Select</b><small>Raise one finger for a moment. The gold glow fills, then it selects.</small></span></div>
 <div class="hand-step"><span>🖐</span><span><b>Open palm → Open menu</b><small>Hold an open hand still.</small></span></div>
 <div class="hand-step"><span>✊</span><span><b>Closed fist → Close</b><small>Hold to close a dish or go back, then relax.</small></span></div>

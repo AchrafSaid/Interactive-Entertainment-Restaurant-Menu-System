@@ -3,10 +3,17 @@
 There is no pointer. The UI keeps one highlighted control; swipes move the
 highlight and holding up one finger selects it. Every other gesture is a
 hold-to-trigger shortcut (see HOLD_POSES).
+
+Static hand SHAPES are classified from the 21 MediaPipe landmarks (classify()).
+Hand MOVEMENTS (swipes and two-finger moves) are classified by the DollarPy
+recogniser in movement_dollarpy.py: the geometry here only decides that the
+hand moved far enough; DollarPy decides which movement it was.
 """
 
 from collections import deque
 import math
+
+from movement_dollarpy import MovementClassifier
 
 # Hold-to-trigger poses: pose -> (action, seconds the pose must be held still).
 # "shortcut" events carry the pose name in event["shortcut"].
@@ -36,10 +43,23 @@ SCROLL_STEP_COOLDOWN = 0.7  # minimum seconds between two-finger steps
 SCROLL_WINDOW = 0.7         # seconds of two-finger travel considered for a step
 # A pose may flicker for a frame or two (tracking noise) without restarting its hold.
 HOLD_GRACE = 0.2
+# After DollarPy rejects a movement, wait this long before trying again (each
+# recognition costs ~10 ms, so it is not repeated on every camera frame).
+DOLLARPY_RETRY = 0.15
+
+_default_classifier = None
+
+
+def default_classifier():
+    global _default_classifier
+    if _default_classifier is None:
+        _default_classifier = MovementClassifier()
+    return _default_classifier
 
 
 class HandInput:
-    def __init__(self):
+    def __init__(self, classifier=None):
+        self.classifier = classifier or default_classifier()
         self.lost()
 
     def lost(self):
@@ -51,7 +71,18 @@ class HandInput:
         self.trail = deque()
         self.scroll_trail = deque()
         self.last_swipe = -10
+        self.retry_at = -10
         return {"type": "hand", "action": "lost"}
+
+    def recognise_movement(self, trail, now):
+        """Ask DollarPy which movement the trail is. Returns a direction or None."""
+        if now < self.retry_at:
+            return None, None
+        direction, name, score = self.classifier.classify(list(trail))
+        info = {"classifier": "dollarpy", "gesture": name, "score": round(score, 3)}
+        if direction is None:
+            self.retry_at = now + DOLLARPY_RETRY
+        return direction, info
 
     @staticmethod
     def distance(a, b):
@@ -118,21 +149,18 @@ class HandInput:
         while self.trail and now - self.trail[0][0] > SWIPE_WINDOW:
             self.trail.popleft()
 
-        # Swipes: a fast sideways or vertical palm movement (not while scrolling).
+        # Swipes: a fast palm movement (not while scrolling). The hand must travel
+        # SWIPE_DISTANCE within SWIPE_WINDOW; DollarPy classifies the movement.
         if pose != "scroll" and now - self.last_swipe >= SWIPE_COOLDOWN:
             t0, x0, y0 = self.trail[0]
-            dx, dy = x - x0, y - y0
-            direction = None
-            if abs(dx) > SWIPE_DISTANCE and abs(dx) > 1.5 * abs(dy):
-                direction = "right" if dx > 0 else "left"
-            elif abs(dy) > SWIPE_DISTANCE and abs(dy) > 1.5 * abs(dx):
-                direction = "down" if dy > 0 else "up"
-            if direction:
-                self.last_swipe = now
-                self.trail.clear()
-                self.hold_pose = None
-                event.update(action="swipe", direction=direction)
-                return event
+            if max(abs(x - x0), abs(y - y0)) > SWIPE_DISTANCE:
+                direction, info = self.recognise_movement(self.trail, now)
+                if direction:
+                    self.last_swipe = now
+                    self.trail.clear()
+                    self.hold_pose = None
+                    event.update(action="swipe", direction=direction, **info)
+                    return event
 
         # Bridge brief tracking flicker: keep the held pose for a moment.
         if (self.hold_pose and pose != self.hold_pose and self.hold_seen is not None
@@ -175,15 +203,13 @@ class HandInput:
             while now - self.scroll_trail[0][0] > SCROLL_WINDOW:
                 self.scroll_trail.popleft()
             t0, x0, y0 = self.scroll_trail[0]
-            dx, dy = x - x0, y - y0
-            if now - self.last_swipe >= SCROLL_STEP_COOLDOWN and max(abs(dx), abs(dy)) >= SCROLL_STEP:
-                if abs(dx) >= abs(dy):
-                    direction = "right" if dx > 0 else "left"
-                else:
-                    direction = "down" if dy > 0 else "up"
-                self.last_swipe = now
-                self.scroll_trail.clear()
-                event.update(action="swipe", direction=direction, delta=0, source="scroll")
+            if (now - self.last_swipe >= SCROLL_STEP_COOLDOWN
+                    and max(abs(x - x0), abs(y - y0)) >= SCROLL_STEP):
+                direction, info = self.recognise_movement(self.scroll_trail, now)
+                if direction:
+                    self.last_swipe = now
+                    self.scroll_trail.clear()
+                    event.update(action="swipe", direction=direction, delta=0, source="scroll", **info)
         else:
             self.scroll_y = None
             self.scroll_trail.clear()
