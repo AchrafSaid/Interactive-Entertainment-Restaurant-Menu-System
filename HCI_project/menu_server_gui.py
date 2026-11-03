@@ -60,7 +60,8 @@ def submit_hand_event(event):
         return False
     state = bluetooth.get_state()
     entry = (state["session_id"], event)
-    if event.get("action") in ("click", "back"):
+    # Discrete gestures are queued so they are never overwritten by motion samples.
+    if event.get("action") in ("click", "back", "select", "swipe", "shortcut"):
         gesture_queue.put(entry)
     else:
         # Replace motion samples rather than allowing a slow UI to build lag.

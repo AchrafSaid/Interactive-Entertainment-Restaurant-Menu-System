@@ -89,6 +89,9 @@ class DesktopTransportTests(unittest.TestCase):
         self.assertEqual(host.latest_hand_event[1]["x"],499)
         host.submit_hand_event({"type":"hand","action":"click","x":.5,"y":.5})
         self.assertEqual(host.gesture_queue.qsize(),1)
+        for action in ("select", "swipe", "shortcut"):
+            host.submit_hand_event({"type":"hand","action":action})
+        self.assertEqual(host.gesture_queue.qsize(),4)
 
     def test_guest_can_use_gestures_without_a_bluetooth_connection(self):
         state = self.bridge.continue_as_guest()

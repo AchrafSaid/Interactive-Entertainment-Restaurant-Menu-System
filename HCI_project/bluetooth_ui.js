@@ -116,7 +116,7 @@ window.BluetoothUI = (() => {
       <button class="btn" onclick="BluetoothUI.continueAsGuest()">Skip · Continue as guest →</button>
       <p class="small">Guest visits include the menu and hand controls. Points are only saved for Bluetooth visits.</p>
       <button class="tab bt-help-link" onclick="BluetoothUI.showHelp(true)">How to connect your iPhone</button>
-      <p class="small">Point and pinch to choose Bluetooth or continue as a guest. Touch and mouse work too.</p></section></main>${helpOpen?help():""}`;
+      <p class="small">Swipe to highlight Bluetooth or guest, then hold up one finger to select. Touch and mouse work too.</p></section></main>${helpOpen?help():""}`;
   }
   function sessionBar() {
     if (!hasAccess()) return "";

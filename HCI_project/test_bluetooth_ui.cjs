@@ -46,11 +46,30 @@ test('a verified connection restores the menu and selected dish quantity is adde
   assert.match(ui.app.innerHTML,/Nadeem/);
   assert.match(ui.app.innerHTML,/10 points/);
   assert.ok(ui.evaluate('ITEMS.length')>20);
-  ui.evaluate(`go('gate');browse();openItem(ITEMS[3].id);changeModalQty(2);addFromModal()`);
+  ui.evaluate(`go('gate');browse()`);
+  assert.equal(ui.evaluate('S.scr'),'categories');
+  assert.match(ui.app.innerHTML,/class="cat-card/);
+  assert.doesNotMatch(ui.app.innerHTML,/onclick="openItem/);
+  ui.evaluate(`setCategory(ITEMS[3].category);openItem(ITEMS[3].id);changeModalQty(2);addFromModal()`);
   assert.equal(ui.evaluate('S.scr'),'browse');
   assert.equal(ui.evaluate('cartCount()'),3);
   assert.equal(ui.evaluate('S.modal'),null);
   assert.doesNotMatch(ui.app.innerHTML,/class="modal"/);
+});
+
+test('categories show first, choosing one shows its dishes, and back returns to the list',()=>{
+  const ui=createUI(); ui.context.BluetoothUI.update(ui.snapshot());
+  ui.evaluate(`browse();setCategory('Drinks')`);
+  assert.equal(ui.evaluate('S.scr'),'browse');
+  assert.equal(ui.evaluate('S.cat'),'Drinks');
+  assert.match(ui.app.innerHTML,/All categories/);
+  ui.evaluate('allCategories()');  // also used by the fist gesture on the dishes screen
+  assert.equal(ui.evaluate('S.scr'),'categories');
+  ui.evaluate(`setCategory('Desserts')`);
+  assert.equal(ui.evaluate('S.cat'),'Desserts');
+  ui.evaluate('allCategories()');
+  assert.equal(ui.evaluate('S.scr'),'categories');
+  assert.ok(!ui.evaluate('S.history').includes('browse'));
 });
 
 test('checkout requires an explicit confirmation and can be cancelled',()=>{

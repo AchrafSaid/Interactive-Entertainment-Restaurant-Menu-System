@@ -27,7 +27,7 @@ class OliveTableApp:
         self.hand_sink = lambda event: None
         self.report_camera_error = print
         self.input = HandInput()
-        self.status = "Point, then pinch to select"
+        self.status = "Swipe to move, hold one finger to select"
 
     def release_camera(self):
         if self.cap is not None:
@@ -72,12 +72,16 @@ class OliveTableApp:
                 if result.multi_hand_landmarks:
                     hand = result.multi_hand_landmarks[0]
                     event = self.input.from_landmarks(hand, now)
-                    if event["action"] in ("click", "back") or now - last_input >= 0.04:
+                    if event["action"] not in ("pose", "scroll") or now - last_input >= 0.04:
                         self.hand_sink(event)
                         last_input = now
                     was_visible = True
-                    self.status = {"point":"Point + pinch to select", "scroll":"Move two fingers up/down to scroll",
-                                   "back":"Hold fist to go back", "pause":"Open hand: pointer paused"}.get(event.get("pose"), "Move your hand closer")
+                    self.status = {"select":"One finger: hold to select", "scroll":"Two fingers: scroll",
+                                   "back":"Fist: close / go back", "pause":"Swipe to move the highlight",
+                                   "menu":"Open palm: open menu", "add":"Thumbs up: add product",
+                                   "decline":"Thumbs down: decline product", "cart":"C shape: open cart",
+                                   "checkout":"OK sign: confirm checkout", "games":"Rock sign: games",
+                                   "rewards":"Three fingers: rewards"}.get(event.get("pose"), "Move your hand closer")
                     mp.solutions.drawing_utils.draw_landmarks(frame, hand, mp.solutions.hands.HAND_CONNECTIONS)
                 elif was_visible:
                     self.hand_sink(self.input.lost())
